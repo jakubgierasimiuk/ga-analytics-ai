@@ -1,19 +1,12 @@
 """
-Streamlit Reporting Interface
+Streamlit App for Google Analytics AI Analyzer
 
-This module provides a web-based user interface for the Google Analytics
-analysis application using Streamlit.
-
-Features:
-- User authentication
-- Google Analytics account connection
-- Analysis configuration
-- Report generation and viewing
-- Report and prompt history management
-- Export functionality
+This is the main application file for the Google Analytics AI Analyzer.
+It provides a web interface for analyzing Google Analytics data using AI.
 """
 
 import os
+import sys
 import json
 import datetime
 import pandas as pd
@@ -25,11 +18,198 @@ from pathlib import Path
 import base64
 import tempfile
 import uuid
+import logging
 
-# Import our custom modules
-from ga_integration import GoogleAnalyticsConnector, GADataProcessor
-from llm_integration import LLMFactory, AnalyticsInsightGenerator, PromptTemplate, AnalyticsPromptLibrary
-from analysis_pipeline import AnalysisPipeline, ReportGenerator, AnalysisWorkflow
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# Import our custom modules with error handling
+try:
+    from ga_integration import GoogleAnalyticsConnector, GADataProcessor
+except ImportError as e:
+    logger.error(f"Error importing ga_integration: {e}")
+    # Create mock classes if imports fail
+    class GoogleAnalyticsConnector:
+        def __init__(self, *args, **kwargs):
+            pass
+        
+        def authenticate(self, *args, **kwargs):
+            return False
+        
+        def get_data(self, *args, **kwargs):
+            return pd.DataFrame()
+        
+        def import_from_file(self, *args, **kwargs):
+            return pd.DataFrame()
+    
+    class GADataProcessor:
+        def __init__(self, *args, **kwargs):
+            pass
+        
+        def get_summary_statistics(self, *args, **kwargs):
+            return {}
+        
+        def prepare_data_for_llm(self, *args, **kwargs):
+            return {}
+
+try:
+    from llm_integration import LLMFactory, AnalyticsInsightGenerator, PromptTemplate, AnalyticsPromptLibrary
+except ImportError as e:
+    logger.error(f"Error importing llm_integration: {e}")
+    # Create mock classes if imports fail
+    class PromptTemplate:
+        def __init__(self, *args, **kwargs):
+            pass
+        
+        def render(self, *args, **kwargs):
+            return ""
+    
+    class AnalyticsPromptLibrary:
+        def get_general_analysis_prompt(self, *args, **kwargs):
+            return PromptTemplate("", {})
+        
+        def get_traffic_analysis_prompt(self, *args, **kwargs):
+            return PromptTemplate("", {})
+        
+        def get_conversion_analysis_prompt(self, *args, **kwargs):
+            return PromptTemplate("", {})
+        
+        def get_user_behavior_analysis_prompt(self, *args, **kwargs):
+            return PromptTemplate("", {})
+        
+        def get_anomaly_detection_prompt(self, *args, **kwargs):
+            return PromptTemplate("", {})
+        
+        def get_comparative_analysis_prompt(self, *args, **kwargs):
+            return PromptTemplate("", {})
+    
+    class LLMFactory:
+        @staticmethod
+        def create_provider(*args, **kwargs):
+            return None
+    
+    class AnalyticsInsightGenerator:
+        def __init__(self, *args, **kwargs):
+            pass
+        
+        def generate_insights(self, *args, **kwargs):
+            return "Mock insights (LLM integration not available)"
+        
+        def generate_general_analysis(self, *args, **kwargs):
+            return "Mock general analysis (LLM integration not available)"
+        
+        def generate_traffic_analysis(self, *args, **kwargs):
+            return "Mock traffic analysis (LLM integration not available)"
+        
+        def generate_conversion_analysis(self, *args, **kwargs):
+            return "Mock conversion analysis (LLM integration not available)"
+        
+        def generate_user_behavior_analysis(self, *args, **kwargs):
+            return "Mock user behavior analysis (LLM integration not available)"
+        
+        def generate_anomaly_analysis(self, *args, **kwargs):
+            return "Mock anomaly analysis (LLM integration not available)"
+        
+        def generate_comparative_analysis(self, *args, **kwargs):
+            return "Mock comparative analysis (LLM integration not available)"
+
+try:
+    from analysis_pipeline import AnalysisPipeline, ReportGenerator, AnalysisWorkflow
+except ImportError as e:
+    logger.error(f"Error importing analysis_pipeline: {e}")
+    # Create mock classes if imports fail
+    class AnalysisWorkflow:
+        @staticmethod
+        def get_standard_metrics(*args, **kwargs):
+            return ["sessions", "users", "pageviews"]
+        
+        @staticmethod
+        def get_standard_dimensions(*args, **kwargs):
+            return ["date", "deviceCategory"]
+        
+        @staticmethod
+        def get_weekly_report_config(*args, **kwargs):
+            return {
+                "metrics": ["sessions", "users", "pageviews"],
+                "dimensions": ["date", "deviceCategory"],
+                "analysis_type": "general"
+            }
+        
+        @staticmethod
+        def get_traffic_overview_config(*args, **kwargs):
+            return {
+                "metrics": ["sessions", "users", "pageviews"],
+                "dimensions": ["source", "medium"],
+                "analysis_type": "traffic"
+            }
+        
+        @staticmethod
+        def get_conversion_overview_config(*args, **kwargs):
+            return {
+                "metrics": ["conversions", "conversionRate"],
+                "dimensions": ["date", "deviceCategory"],
+                "analysis_type": "conversion"
+            }
+        
+        @staticmethod
+        def get_user_behavior_config(*args, **kwargs):
+            return {
+                "metrics": ["sessionDuration", "bounceRate"],
+                "dimensions": ["date", "deviceCategory"],
+                "analysis_type": "user_behavior"
+            }
+        
+        @staticmethod
+        def get_comparative_report_config(*args, **kwargs):
+            return {
+                "metrics": ["sessions", "users", "pageviews"],
+                "dimensions": ["date", "deviceCategory"],
+                "analysis_type": "comparative"
+            }
+    
+    class ReportGenerator:
+        def __init__(self, *args, **kwargs):
+            pass
+        
+        def generate_markdown_report(self, *args, **kwargs):
+            return "# Mock Report\n\nThis is a mock report generated when the analysis pipeline is not available."
+        
+        def generate_html_report(self, *args, **kwargs):
+            return "<h1>Mock Report</h1><p>This is a mock report generated when the analysis pipeline is not available.</p>"
+        
+        def save_report(self, *args, **kwargs):
+            return "/tmp/mock_report.md"
+    
+    class AnalysisPipeline:
+        def __init__(self, *args, **kwargs):
+            self.ga_connector = GoogleAnalyticsConnector()
+            self.insight_generator = AnalyticsInsightGenerator()
+        
+        def authenticate_ga(self, *args, **kwargs):
+            return False
+        
+        def import_ga_data(self, *args, **kwargs):
+            return pd.DataFrame()
+        
+        def import_ga_data_from_file(self, *args, **kwargs):
+            return pd.DataFrame()
+        
+        def analyze_data(self, *args, **kwargs):
+            return {}
+        
+        def generate_insights(self, *args, **kwargs):
+            return "Mock insights (Analysis pipeline not available)"
+        
+        def run_complete_analysis(self, *args, **kwargs):
+            return {
+                "raw_data": pd.DataFrame(),
+                "processed_data": {},
+                "insights": "Mock insights (Analysis pipeline not available)",
+                "metadata": {
+                    "timestamp": datetime.datetime.now().isoformat()
+                }
+            }
 
 # Set page configuration
 st.set_page_config(
@@ -393,15 +573,19 @@ init_system_prompts()
 # Helper functions
 def get_file_download_link(file_path: str, link_text: str) -> str:
     """Generate a download link for a file."""
-    with open(file_path, 'r') as f:
-        data = f.read()
-    
-    b64 = base64.b64encode(data.encode()).decode()
-    filename = os.path.basename(file_path)
-    mime_type = 'text/markdown' if file_path.endswith('.md') else 'text/html'
-    
-    href = f'<a href="data:{mime_type};base64,{b64}" download="{filename}">{link_text}</a>'
-    return href
+    try:
+        with open(file_path, 'r') as f:
+            data = f.read()
+        
+        b64 = base64.b64encode(data.encode()).decode()
+        filename = os.path.basename(file_path)
+        mime_type = 'text/markdown' if file_path.endswith('.md') else 'text/html'
+        
+        href = f'<a href="data:{mime_type};base64,{b64}" download="{filename}">{link_text}</a>'
+        return href
+    except Exception as e:
+        logger.error(f"Error creating download link: {e}")
+        return f"Error creating download link: {str(e)}"
 
 def format_date_for_ga(date_obj: datetime.date) -> str:
     """Format a date for Google Analytics API."""
