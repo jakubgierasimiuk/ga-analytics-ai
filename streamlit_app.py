@@ -597,7 +597,7 @@ def render_login():
                 
                 # Navigate to dashboard
                 navigate_to('dashboard')
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("Please enter both email and name")
 
@@ -629,7 +629,7 @@ def render_dashboard():
         if st.button("Logout", key="nav_logout"):
             st.session_state.user = None
             navigate_to('login')
-            st.experimental_rerun()
+            st.rerun()
     
     # Dashboard content
     st.header("Dashboard")
@@ -642,7 +642,7 @@ def render_dashboard():
         
         if st.button("Connect Google Analytics"):
             navigate_to('settings')
-            st.experimental_rerun()
+            st.rerun()
         
         return
     
@@ -654,7 +654,7 @@ def render_dashboard():
         
         if st.button("Add API Keys"):
             navigate_to('settings')
-            st.experimental_rerun()
+            st.rerun()
         
         return
     
@@ -668,7 +668,7 @@ def render_dashboard():
         
         if st.button("Create New Analysis"):
             navigate_to('new_analysis')
-            st.experimental_rerun()
+            st.rerun()
     else:
         # Sort reports by creation date (newest first)
         reports.sort(key=lambda x: x['created_at'], reverse=True)
@@ -685,11 +685,11 @@ def render_dashboard():
                 if st.button("View", key=f"view_{report['id']}"):
                     st.session_state.selected_report = report
                     navigate_to('view_report')
-                    st.experimental_rerun()
+                    st.rerun()
         
         if st.button("View All Reports"):
             navigate_to('report_history')
-            st.experimental_rerun()
+            st.rerun()
     
     # Quick actions
     st.subheader("Quick Actions")
@@ -699,17 +699,17 @@ def render_dashboard():
     with col1:
         if st.button("New Analysis"):
             navigate_to('new_analysis')
-            st.experimental_rerun()
+            st.rerun()
     
     with col2:
         if st.button("Manage Prompts"):
             navigate_to('prompt_library')
-            st.experimental_rerun()
+            st.rerun()
     
     with col3:
         if st.button("Account Settings"):
             navigate_to('settings')
-            st.experimental_rerun()
+            st.rerun()
 
 def render_new_analysis():
     """Render the new analysis page."""
@@ -723,7 +723,7 @@ def render_new_analysis():
         
         if st.button("Connect Google Analytics"):
             navigate_to('settings')
-            st.experimental_rerun()
+            st.rerun()
         
         return
     
@@ -735,7 +735,7 @@ def render_new_analysis():
         
         if st.button("Add API Keys"):
             navigate_to('settings')
-            st.experimental_rerun()
+            st.rerun()
         
         return
     
@@ -923,7 +923,7 @@ def render_new_analysis():
             # Option to view in report history
             if st.button("Go to Report History"):
                 navigate_to('report_history')
-                st.experimental_rerun()
+                st.rerun()
             
         except Exception as e:
             st.error(f"Error running analysis: {str(e)}")
@@ -941,7 +941,7 @@ def render_report_history():
         
         if st.button("Create New Analysis"):
             navigate_to('new_analysis')
-            st.experimental_rerun()
+            st.rerun()
         
         return
     
@@ -990,13 +990,13 @@ def render_report_history():
             if st.button("View", key=f"view_{report['id']}"):
                 st.session_state.selected_report = report
                 navigate_to('view_report')
-                st.experimental_rerun()
+                st.rerun()
             
             # Toggle favorite status
             favorite_label = "Remove Favorite" if report.get('is_favorite') else "Add Favorite"
             if st.button(favorite_label, key=f"fav_{report['id']}"):
                 update_report(report['id'], {'is_favorite': not report.get('is_favorite', False)})
-                st.experimental_rerun()
+                st.rerun()
         
         st.markdown("---")
 
@@ -1007,7 +1007,7 @@ def render_view_report():
         
         if st.button("Back to Report History"):
             navigate_to('report_history')
-            st.experimental_rerun()
+            st.rerun()
         
         return
     
@@ -1042,19 +1042,19 @@ def render_view_report():
         if st.button(favorite_label):
             update_report(report['id'], {'is_favorite': not report.get('is_favorite', False)})
             st.session_state.selected_report = update_report(report['id'], {})  # Refresh the report
-            st.experimental_rerun()
+            st.rerun()
     
     with col2:
         # Run similar analysis
         if st.button("Run Similar Analysis"):
             navigate_to('new_analysis')
-            st.experimental_rerun()
+            st.rerun()
     
     with col3:
         # Back to report history
         if st.button("Back to Report History"):
             navigate_to('report_history')
-            st.experimental_rerun()
+            st.rerun()
 
 def render_prompt_library():
     """Render the prompt library page."""
@@ -1123,14 +1123,14 @@ def render_prompt_library():
                         favorite_label = "Remove from Favorites" if prompt.get('is_favorite') else "Add to Favorites"
                         if not prompt.get('is_system') and st.button(favorite_label, key=f"fav_{prompt['id']}"):
                             update_prompt(prompt['id'], {'is_favorite': not prompt.get('is_favorite', False)})
-                            st.experimental_rerun()
+                            st.rerun()
                     
                     with col2:
                         # Edit prompt (only for user prompts)
                         if not prompt.get('is_system') and st.button("Edit", key=f"edit_{prompt['id']}"):
                             st.session_state.selected_prompt = prompt
                             st.session_state.editing_prompt = True
-                            st.experimental_rerun()
+                            st.rerun()
     
     with tab2:
         # Check if we're editing an existing prompt
@@ -1177,7 +1177,7 @@ def render_prompt_library():
             with col3:
                 if st.button("Remove", key=f"remove_{param_name}"):
                     del st.session_state.prompt_params[param_name]
-                    st.experimental_rerun()
+                    st.rerun()
         
         # Add new parameter
         st.subheader("Add Parameter")
@@ -1192,7 +1192,7 @@ def render_prompt_library():
         with col3:
             if st.button("Add") and new_param_name:
                 st.session_state.prompt_params[new_param_name] = new_param_value
-                st.experimental_rerun()
+                st.rerun()
         
         # Save button
         if editing:
@@ -1215,7 +1215,7 @@ def render_prompt_library():
                     st.session_state.prompt_params = {}
                     
                     st.success("Prompt updated successfully!")
-                    st.experimental_rerun()
+                    st.rerun()
                 else:
                     st.error("Title and template are required")
             
@@ -1227,7 +1227,7 @@ def render_prompt_library():
                 # Clear parameters
                 st.session_state.prompt_params = {}
                 
-                st.experimental_rerun()
+                st.rerun()
         else:
             if st.button("Create Prompt"):
                 if title and prompt_template:
@@ -1245,7 +1245,7 @@ def render_prompt_library():
                     st.session_state.prompt_params = {}
                     
                     st.success("Prompt created successfully!")
-                    st.experimental_rerun()
+                    st.rerun()
                 else:
                     st.error("Title and template are required")
 
@@ -1278,7 +1278,7 @@ def render_settings():
                     if st.button("Delete", key=f"delete_{account['id']}"):
                         if delete_ga_account(account['id']):
                             st.success(f"Account {account['account_name']} deleted successfully!")
-                            st.experimental_rerun()
+                            st.rerun()
                         else:
                             st.error("Failed to delete account")
                 
@@ -1323,7 +1323,7 @@ def render_settings():
                     )
                     
                     st.success("Account added successfully!")
-                    st.experimental_rerun()
+                    st.rerun()
                 except Exception as e:
                     st.error(f"Error adding account: {str(e)}")
                     logger.error(f"Error adding GA account: {str(e)}", exc_info=True)
@@ -1372,7 +1372,7 @@ def render_settings():
                 )
                 
                 st.success(f"{service.capitalize()} API key saved successfully!")
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("Please select a service and enter an API key")
     
@@ -1411,7 +1411,7 @@ def render_settings():
                 st.session_state.user['name'] = new_name
                 
                 st.success("User information updated successfully!")
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("Name cannot be empty")
 
