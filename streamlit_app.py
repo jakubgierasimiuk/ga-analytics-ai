@@ -19,6 +19,7 @@ import base64
 import tempfile
 import uuid
 import logging
+import shutil
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -226,9 +227,10 @@ CACHE_DIR = BASE_DIR / "cache"
 REPORTS_DIR = BASE_DIR / "reports"
 PROMPTS_DIR = BASE_DIR / "prompts"
 CONFIG_DIR = BASE_DIR / "config"
+CREDENTIALS_DIR = BASE_DIR / "credentials"  # New directory for storing OAuth credentials
 
 # Create directories if they don't exist
-for directory in [DATA_DIR, CACHE_DIR, REPORTS_DIR, PROMPTS_DIR, CONFIG_DIR]:
+for directory in [DATA_DIR, CACHE_DIR, REPORTS_DIR, PROMPTS_DIR, CONFIG_DIR, CREDENTIALS_DIR]:
     directory.mkdir(exist_ok=True, parents=True)
 
 # Define database file paths
@@ -347,6 +349,27 @@ def add_ga_account(user_id: str, account_name: str, property_id: str, credential
     save_json_db(GA_ACCOUNTS_DB, accounts)
     
     return new_account
+
+def delete_ga_account(account_id: str) -> bool:
+    """Delete a Google Analytics account."""
+    accounts = load_json_db(GA_ACCOUNTS_DB)
+    
+    # Find the account to delete
+    for i, account in enumerate(accounts):
+        if account['id'] == account_id:
+            # Delete the credentials file if it exists
+            if os.path.exists(account['credentials_path']):
+                try:
+                    os.remove(account['credentials_path'])
+                except Exception as e:
+                    logger.error(f"Error deleting credentials file: {e}")
+            
+            # Remove the account from the list
+            del accounts[i]
+            save_json_db(GA_ACCOUNTS_DB, accounts)
+            return True
+    
+    return False
 
 def get_api_keys(user_id: str) -> Dict[str, Dict[str, Any]]:
     """Get API keys for a user."""
@@ -489,234 +512,137 @@ def increment_prompt_usage(prompt_id: str) -> Optional[Dict[str, Any]]:
     
     return None
 
-# Initialize system prompts
-def init_system_prompts():
-    """Initialize system prompts if they don't exist."""
-    prompts = load_json_db(PROMPTS_DB)
-    
-    # Check if system prompts exist
-    system_prompts_exist = any(prompt.get('is_system', False) for prompt in prompts)
-    
-    if not system_prompts_exist:
-        # Create system prompts
-        prompt_library = AnalyticsPromptLibrary()
-        
-        system_prompts = [
-            {
-                'title': 'General Analysis',
-                'description': 'General analysis of Google Analytics data',
-                'prompt_template': prompt_library.get_general_analysis_prompt().template,
-                'parameters': prompt_library.get_general_analysis_prompt().parameters,
-                'category': 'general'
-            },
-            {
-                'title': 'Traffic Analysis',
-                'description': 'Analysis of traffic sources and patterns',
-                'prompt_template': prompt_library.get_traffic_analysis_prompt().template,
-                'parameters': prompt_library.get_traffic_analysis_prompt().parameters,
-                'category': 'traffic'
-            },
-            {
-                'title': 'Conversion Analysis',
-                'description': 'Analysis of conversion rates and revenue',
-                'prompt_template': prompt_library.get_conversion_analysis_prompt().template,
-                'parameters': prompt_library.get_conversion_analysis_prompt().parameters,
-                'category': 'conversion'
-            },
-            {
-                'title': 'User Behavior Analysis',
-                'description': 'Analysis of user engagement and behavior',
-                'prompt_template': prompt_library.get_user_behavior_analysis_prompt().template,
-                'parameters': prompt_library.get_user_behavior_analysis_prompt().parameters,
-                'category': 'user_behavior'
-            },
-            {
-                'title': 'Anomaly Detection',
-                'description': 'Detection and analysis of anomalies in the data',
-                'prompt_template': prompt_library.get_anomaly_detection_prompt().template,
-                'parameters': prompt_library.get_anomaly_detection_prompt().parameters,
-                'category': 'anomaly'
-            },
-            {
-                'title': 'Comparative Analysis',
-                'description': 'Comparison of two time periods',
-                'prompt_template': prompt_library.get_comparative_analysis_prompt().template,
-                'parameters': prompt_library.get_comparative_analysis_prompt().parameters,
-                'category': 'comparative'
-            }
-        ]
-        
-        for prompt_data in system_prompts:
-            new_prompt = {
-                'id': str(uuid.uuid4()),
-                'user_id': None,
-                'title': prompt_data['title'],
-                'description': prompt_data['description'],
-                'prompt_template': prompt_data['prompt_template'],
-                'parameters': prompt_data['parameters'],
-                'category': prompt_data['category'],
-                'created_at': datetime.datetime.now().isoformat(),
-                'updated_at': datetime.datetime.now().isoformat(),
-                'usage_count': 0,
-                'is_favorite': False,
-                'is_system': True,
-                'tags': ['system']
-            }
-            
-            prompts.append(new_prompt)
-        
-        save_json_db(PROMPTS_DB, prompts)
-
-# Call initialization
-init_system_prompts()
-
 # Helper functions
 def get_file_download_link(file_path: str, link_text: str) -> str:
     """Generate a download link for a file."""
-    try:
-        with open(file_path, 'r') as f:
-            data = f.read()
-        
-        b64 = base64.b64encode(data.encode()).decode()
-        filename = os.path.basename(file_path)
-        mime_type = 'text/markdown' if file_path.endswith('.md') else 'text/html'
-        
-        href = f'<a href="data:{mime_type};base64,{b64}" download="{filename}">{link_text}</a>'
-        return href
-    except Exception as e:
-        logger.error(f"Error creating download link: {e}")
-        return f"Error creating download link: {str(e)}"
+    with open(file_path, 'r') as f:
+        data = f.read()
+    
+    b64 = base64.b64encode(data.encode()).decode()
+    filename = os.path.basename(file_path)
+    
+    return f'<a href="data:file/txt;base64,{b64}" download="{filename}">{link_text}</a>'
 
-def format_date_for_ga(date_obj: datetime.date) -> str:
-    """Format a date for Google Analytics API."""
-    return date_obj.strftime('%Y-%m-%d')
+def save_uploaded_file(uploaded_file, directory: Path, filename: Optional[str] = None) -> str:
+    """Save an uploaded file to the specified directory."""
+    if not filename:
+        filename = uploaded_file.name
+    
+    file_path = directory / filename
+    
+    with open(file_path, 'wb') as f:
+        f.write(uploaded_file.getbuffer())
+    
+    return str(file_path)
 
-# Authentication and session management
-def init_session_state():
-    """Initialize session state variables."""
+def navigate_to(page: str):
+    """Navigate to a different page in the app."""
+    st.session_state.page = page
+
+# Main app
+def main():
+    """Main application function."""
+    # Initialize session state
+    if 'page' not in st.session_state:
+        st.session_state.page = 'login'
+    
     if 'user' not in st.session_state:
         st.session_state.user = None
     
-    if 'authenticated' not in st.session_state:
-        st.session_state.authenticated = False
-    
-    if 'current_page' not in st.session_state:
-        st.session_state.current_page = 'login'
-    
-    if 'ga_connector' not in st.session_state:
-        st.session_state.ga_connector = None
-    
-    if 'analysis_pipeline' not in st.session_state:
-        st.session_state.analysis_pipeline = None
-    
-    if 'report_generator' not in st.session_state:
-        st.session_state.report_generator = None
-
-def login_user(email: str, name: str):
-    """Log in a user."""
-    user = get_user_by_email(email)
-    
-    if not user:
-        user = add_user(email, name)
+    # Render the appropriate page
+    if st.session_state.page == 'login':
+        render_login()
+    elif not st.session_state.user:
+        # If not logged in, redirect to login
+        st.session_state.page = 'login'
+        render_login()
+    elif st.session_state.page == 'dashboard':
+        render_dashboard()
+    elif st.session_state.page == 'new_analysis':
+        render_new_analysis()
+    elif st.session_state.page == 'report_history':
+        render_report_history()
+    elif st.session_state.page == 'view_report':
+        render_view_report()
+    elif st.session_state.page == 'prompt_library':
+        render_prompt_library()
+    elif st.session_state.page == 'settings':
+        render_settings()
     else:
-        update_user_login(user['id'])
-    
-    st.session_state.user = user
-    st.session_state.authenticated = True
-    st.session_state.current_page = 'dashboard'
+        # Default to dashboard
+        st.session_state.page = 'dashboard'
+        render_dashboard()
 
-def logout_user():
-    """Log out the current user."""
-    st.session_state.user = None
-    st.session_state.authenticated = False
-    st.session_state.current_page = 'login'
-    st.session_state.ga_connector = None
-    st.session_state.analysis_pipeline = None
-    st.session_state.report_generator = None
-
-# Initialize session state
-init_session_state()
-
-# Page navigation
-def navigate_to(page: str):
-    """Navigate to a specific page."""
-    st.session_state.current_page = page
-
-# UI Components
-def render_sidebar():
-    """Render the sidebar navigation."""
-    st.sidebar.title("GA Analytics AI")
-    
-    if st.session_state.authenticated:
-        st.sidebar.write(f"Welcome, {st.session_state.user['name']}!")
-        
-        st.sidebar.header("Navigation")
-        
-        if st.sidebar.button("Dashboard", key="nav_dashboard"):
-            navigate_to('dashboard')
-        
-        if st.sidebar.button("New Analysis", key="nav_new_analysis"):
-            navigate_to('new_analysis')
-        
-        if st.sidebar.button("Report History", key="nav_report_history"):
-            navigate_to('report_history')
-        
-        if st.sidebar.button("Prompt Library", key="nav_prompt_library"):
-            navigate_to('prompt_library')
-        
-        if st.sidebar.button("Settings", key="nav_settings"):
-            navigate_to('settings')
-        
-        st.sidebar.markdown("---")
-        
-        if st.sidebar.button("Logout", key="nav_logout"):
-            logout_user()
-    
-    st.sidebar.markdown("---")
-    st.sidebar.caption("© 2025 GA Analytics AI")
-
-def render_login_page():
+def render_login():
     """Render the login page."""
-    st.title("Welcome to GA Analytics AI")
-    st.write("Your AI-powered Google Analytics assistant")
+    st.title("GA Analytics AI")
+    st.subheader("Login")
     
-    st.markdown("---")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.header("Login")
+    with st.form("login_form"):
         email = st.text_input("Email")
         name = st.text_input("Name")
         
-        if st.button("Login"):
+        submitted = st.form_submit_button("Login")
+        
+        if submitted:
             if email and name:
-                login_user(email, name)
+                # Add or get user
+                user = add_user(email, name)
+                
+                # Update last login
+                update_user_login(user['id'])
+                
+                # Set user in session state
+                st.session_state.user = user
+                
+                # Navigate to dashboard
+                navigate_to('dashboard')
+                st.experimental_rerun()
             else:
                 st.error("Please enter both email and name")
-    
-    with col2:
-        st.header("Features")
-        st.markdown("""
-        - AI-powered analysis of Google Analytics data
-        - Automatic insight generation
-        - Custom report creation
-        - Historical report tracking
-        - Prompt library for customized analysis
-        """)
 
 def render_dashboard():
     """Render the dashboard page."""
-    st.title("Dashboard")
+    st.title(f"Welcome, {st.session_state.user['name']}!")
+    
+    # Sidebar navigation
+    with st.sidebar:
+        st.title("Navigation")
+        
+        if st.button("Dashboard", key="nav_dashboard"):
+            navigate_to('dashboard')
+        
+        if st.button("New Analysis", key="nav_new_analysis"):
+            navigate_to('new_analysis')
+        
+        if st.button("Report History", key="nav_report_history"):
+            navigate_to('report_history')
+        
+        if st.button("Prompt Library", key="nav_prompt_library"):
+            navigate_to('prompt_library')
+        
+        if st.button("Settings", key="nav_settings"):
+            navigate_to('settings')
+        
+        st.markdown("---")
+        
+        if st.button("Logout", key="nav_logout"):
+            st.session_state.user = None
+            navigate_to('login')
+            st.experimental_rerun()
+    
+    # Dashboard content
+    st.header("Dashboard")
     
     # Check if user has GA accounts
     ga_accounts = get_ga_accounts(st.session_state.user['id'])
     
     if not ga_accounts:
-        st.warning("You don't have any Google Analytics accounts connected. Go to Settings to add one.")
+        st.warning("You haven't connected any Google Analytics accounts yet.")
         
-        if st.button("Go to Settings"):
+        if st.button("Connect Google Analytics"):
             navigate_to('settings')
+            st.experimental_rerun()
         
         return
     
@@ -724,60 +650,66 @@ def render_dashboard():
     api_keys = get_api_keys(st.session_state.user['id'])
     
     if not api_keys:
-        st.warning("You don't have any LLM API keys configured. Go to Settings to add one.")
+        st.warning("You haven't added any API keys yet.")
         
-        if st.button("Go to Settings"):
+        if st.button("Add API Keys"):
             navigate_to('settings')
+            st.experimental_rerun()
         
         return
     
-    # Display recent reports
-    st.header("Recent Reports")
+    # Recent reports
+    st.subheader("Recent Reports")
     
     reports = get_reports(st.session_state.user['id'])
-    reports.sort(key=lambda x: x['created_at'], reverse=True)
     
     if not reports:
-        st.info("You haven't created any reports yet. Create your first analysis!")
+        st.info("You haven't created any reports yet.")
         
-        if st.button("New Analysis"):
+        if st.button("Create New Analysis"):
             navigate_to('new_analysis')
+            st.experimental_rerun()
+    else:
+        # Sort reports by creation date (newest first)
+        reports.sort(key=lambda x: x['created_at'], reverse=True)
         
-        return
-    
-    # Display the 5 most recent reports
-    recent_reports = reports[:5]
-    
-    for report in recent_reports:
-        with st.expander(f"{report['title']} ({report['created_at'][:10]})"):
-            st.write(f"**Description:** {report['description']}")
-            st.write(f"**Analysis Type:** {report['analysis_type']}")
+        # Display the 5 most recent reports
+        for report in reports[:5]:
+            col1, col2 = st.columns([3, 1])
             
-            if report.get('file_path') and os.path.exists(report['file_path']):
-                st.markdown(get_file_download_link(report['file_path'], "Download Report"), unsafe_allow_html=True)
+            with col1:
+                st.write(f"**{report['title']}**")
+                st.write(f"Created: {report['created_at'][:10]}")
             
-            if st.button("View Details", key=f"view_{report['id']}"):
-                st.session_state.selected_report = report
-                navigate_to('view_report')
-    
-    st.markdown("---")
+            with col2:
+                if st.button("View", key=f"view_{report['id']}"):
+                    st.session_state.selected_report = report
+                    navigate_to('view_report')
+                    st.experimental_rerun()
+        
+        if st.button("View All Reports"):
+            navigate_to('report_history')
+            st.experimental_rerun()
     
     # Quick actions
-    st.header("Quick Actions")
+    st.subheader("Quick Actions")
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("New Analysis", key="dashboard_new_analysis"):
+        if st.button("New Analysis"):
             navigate_to('new_analysis')
+            st.experimental_rerun()
     
     with col2:
-        if st.button("View All Reports", key="dashboard_all_reports"):
-            navigate_to('report_history')
+        if st.button("Manage Prompts"):
+            navigate_to('prompt_library')
+            st.experimental_rerun()
     
     with col3:
-        if st.button("Prompt Library", key="dashboard_prompt_library"):
-            navigate_to('prompt_library')
+        if st.button("Account Settings"):
+            navigate_to('settings')
+            st.experimental_rerun()
 
 def render_new_analysis():
     """Render the new analysis page."""
@@ -787,248 +719,215 @@ def render_new_analysis():
     ga_accounts = get_ga_accounts(st.session_state.user['id'])
     
     if not ga_accounts:
-        st.warning("You don't have any Google Analytics accounts connected. Go to Settings to add one.")
+        st.warning("You haven't connected any Google Analytics accounts yet.")
         
-        if st.button("Go to Settings"):
+        if st.button("Connect Google Analytics"):
             navigate_to('settings')
+            st.experimental_rerun()
         
         return
     
     # Check if user has API keys
     api_keys = get_api_keys(st.session_state.user['id'])
     
-    if not api_keys:
-        st.warning("You don't have any LLM API keys configured. Go to Settings to add one.")
+    if not api_keys or 'openai' not in api_keys:
+        st.warning("You need to add an OpenAI API key to use this feature.")
         
-        if st.button("Go to Settings"):
+        if st.button("Add API Keys"):
             navigate_to('settings')
+            st.experimental_rerun()
         
         return
     
-    # Analysis configuration
+    # Analysis form
     st.header("Analysis Configuration")
     
-    # Step 1: Select GA account
-    st.subheader("Step 1: Select Google Analytics Account")
-    
-    account_options = {account['account_name']: account for account in ga_accounts}
-    selected_account_name = st.selectbox("Select Account", list(account_options.keys()))
-    selected_account = account_options[selected_account_name]
-    
-    # Step 2: Select date range
-    st.subheader("Step 2: Select Date Range")
-    
-    date_range_type = st.radio("Date Range Type", ["Last N Days", "Custom Range", "Comparison"])
-    
-    if date_range_type == "Last N Days":
-        days = st.slider("Number of Days", 7, 90, 30)
-        end_date = datetime.datetime.now().date()
-        start_date = end_date - datetime.timedelta(days=days)
+    with st.form("analysis_form"):
+        # GA account selection
+        st.subheader("Google Analytics Account")
+        selected_account = st.selectbox(
+            "Select Account",
+            options=ga_accounts,
+            format_func=lambda x: f"{x['account_name']} ({x['property_id']})"
+        )
         
-        date_range = {
-            'start_date': format_date_for_ga(start_date),
-            'end_date': format_date_for_ga(end_date)
+        # Date range
+        st.subheader("Date Range")
+        date_range_options = {
+            "last_7_days": "Last 7 Days",
+            "last_30_days": "Last 30 Days",
+            "last_90_days": "Last 90 Days",
+            "last_year": "Last Year",
+            "custom": "Custom Range"
         }
         
-        st.write(f"Selected range: {start_date} to {end_date}")
+        selected_date_range = st.selectbox(
+            "Select Date Range",
+            options=list(date_range_options.keys()),
+            format_func=lambda x: date_range_options[x]
+        )
         
-    elif date_range_type == "Custom Range":
-        col1, col2 = st.columns(2)
+        if selected_date_range == "custom":
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                start_date = st.date_input("Start Date")
+            
+            with col2:
+                end_date = st.date_input("End Date")
         
-        with col1:
-            start_date = st.date_input("Start Date", datetime.datetime.now().date() - datetime.timedelta(days=30))
-        
-        with col2:
-            end_date = st.date_input("End Date", datetime.datetime.now().date())
-        
-        date_range = {
-            'start_date': format_date_for_ga(start_date),
-            'end_date': format_date_for_ga(end_date)
+        # Analysis type
+        st.subheader("Analysis Type")
+        analysis_types = {
+            "general": "General Overview",
+            "traffic": "Traffic Analysis",
+            "conversion": "Conversion Analysis",
+            "user_behavior": "User Behavior Analysis",
+            "anomaly": "Anomaly Detection",
+            "comparative": "Comparative Analysis"
         }
         
-    else:  # Comparison
-        st.write("Compare two time periods:")
+        selected_analysis_key = st.selectbox(
+            "Select Analysis Type",
+            options=list(analysis_types.keys()),
+            format_func=lambda x: analysis_types[x]
+        )
         
-        col1, col2 = st.columns(2)
+        # Prompt selection
+        st.subheader("Analysis Prompt")
         
-        with col1:
-            st.write("Current Period:")
-            current_start = st.date_input("Start Date", datetime.datetime.now().date() - datetime.timedelta(days=30))
-            current_end = st.date_input("End Date", datetime.datetime.now().date())
+        # Get prompts for the selected analysis type
+        prompts = get_prompts(st.session_state.user['id'])
+        filtered_prompts = [p for p in prompts if p.get('category') == selected_analysis_key]
         
-        with col2:
-            st.write("Previous Period:")
-            previous_start = st.date_input("Start Date", current_start - datetime.timedelta(days=30))
-            previous_end = st.date_input("End Date", current_end - datetime.timedelta(days=30))
+        prompt_options = [{"id": None, "title": "Default Prompt"}] + filtered_prompts
         
-        date_range = [
-            {
-                'start_date': format_date_for_ga(current_start),
-                'end_date': format_date_for_ga(current_end)
-            },
-            {
-                'start_date': format_date_for_ga(previous_start),
-                'end_date': format_date_for_ga(previous_end)
-            }
-        ]
-    
-    # Step 3: Select analysis type
-    st.subheader("Step 3: Select Analysis Type")
-    
-    analysis_types = {
-        "general": "General Analysis",
-        "traffic": "Traffic Analysis",
-        "conversion": "Conversion Analysis",
-        "user_behavior": "User Behavior Analysis",
-        "anomaly": "Anomaly Detection"
-    }
-    
-    if date_range_type == "Comparison":
-        analysis_types["comparative"] = "Comparative Analysis"
-    
-    selected_analysis_type = st.selectbox("Analysis Type", list(analysis_types.values()))
-    selected_analysis_key = list(analysis_types.keys())[list(analysis_types.values()).index(selected_analysis_type)]
-    
-    # Step 4: Configure metrics and dimensions
-    st.subheader("Step 4: Configure Metrics and Dimensions")
-    
-    # Get predefined configuration based on analysis type
-    if selected_analysis_key == "general":
-        config = AnalysisWorkflow.get_weekly_report_config()
-    elif selected_analysis_key == "traffic":
-        config = AnalysisWorkflow.get_traffic_overview_config()
-    elif selected_analysis_key == "conversion":
-        config = AnalysisWorkflow.get_conversion_overview_config()
-    elif selected_analysis_key == "user_behavior":
-        config = AnalysisWorkflow.get_user_behavior_config()
-    elif selected_analysis_key == "comparative":
-        config = AnalysisWorkflow.get_comparative_report_config()
-    else:
-        # Default to traffic config for anomaly
-        config = AnalysisWorkflow.get_traffic_overview_config()
-    
-    # Allow user to customize metrics and dimensions
-    st.write("Metrics:")
-    selected_metrics = st.multiselect("Select Metrics", config['metrics'], default=config['metrics'])
-    
-    st.write("Dimensions:")
-    selected_dimensions = st.multiselect("Select Dimensions", config['dimensions'], default=config['dimensions'])
-    
-    # Step 5: Configure prompt
-    st.subheader("Step 5: Configure Analysis Prompt")
-    
-    # Get prompts for the selected analysis type
-    prompts = get_prompts(st.session_state.user['id'])
-    type_prompts = [p for p in prompts if p.get('category') == selected_analysis_key]
-    
-    if type_prompts:
-        prompt_options = {f"{p['title']}": p for p in type_prompts}
-        selected_prompt_name = st.selectbox("Select Prompt Template", list(prompt_options.keys()))
-        selected_prompt = prompt_options[selected_prompt_name]
+        selected_prompt_index = st.selectbox(
+            "Select Prompt",
+            options=range(len(prompt_options)),
+            format_func=lambda i: prompt_options[i]['title']
+        )
         
-        # Display prompt parameters
-        st.write("Prompt Parameters:")
+        selected_prompt = prompt_options[selected_prompt_index] if selected_prompt_index > 0 else None
         
-        prompt_params = {}
-        for param_name, param_default in selected_prompt.get('parameters', {}).items():
-            param_value = st.text_input(f"{param_name}", value=param_default)
-            prompt_params[param_name] = param_value
-    else:
-        st.warning(f"No prompts found for {selected_analysis_type}. Using default prompt.")
-        selected_prompt = None
-        prompt_params = {}
+        # Report details
+        st.subheader("Report Details")
+        report_title = st.text_input("Report Title", value=f"{analysis_types[selected_analysis_key]} - {datetime.datetime.now().strftime('%Y-%m-%d')}")
+        report_description = st.text_area("Report Description", value=f"Analysis of {selected_analysis_key} data from Google Analytics.")
+        
+        # Submit button
+        submitted = st.form_submit_button("Run Analysis")
     
-    # Step 6: Run analysis
-    st.subheader("Step 6: Run Analysis")
-    
-    report_title = st.text_input("Report Title", f"{selected_analysis_type} - {datetime.datetime.now().strftime('%Y-%m-%d')}")
-    report_description = st.text_area("Report Description", f"Analysis of {selected_account_name} data")
-    
-    if st.button("Run Analysis"):
-        with st.spinner("Running analysis..."):
-            # Initialize the pipeline if not already done
-            if not st.session_state.analysis_pipeline:
-                # Get API key for the selected LLM provider
-                llm_provider = "openai"  # Default to OpenAI
-                llm_api_key = api_keys.get(llm_provider, {}).get('api_key')
-                
-                if not llm_api_key:
-                    st.error(f"No API key found for {llm_provider}. Please add one in Settings.")
-                    return
-                
-                # Initialize the pipeline
-                st.session_state.analysis_pipeline = AnalysisPipeline(
-                    ga_credentials_path=selected_account['credentials_path'],
-                    llm_provider=llm_provider,
-                    llm_api_key=llm_api_key,
-                    cache_dir=str(CACHE_DIR)
-                )
-                
-                # Initialize the report generator
-                st.session_state.report_generator = ReportGenerator(output_dir=str(REPORTS_DIR))
+    if submitted:
+        try:
+            st.info("Running analysis... This may take a few moments.")
             
-            # Authenticate with GA
-            if not st.session_state.analysis_pipeline.authenticate_ga():
-                st.error("Failed to authenticate with Google Analytics. Please check your credentials.")
-                return
+            # Create date range dict
+            if selected_date_range == "custom":
+                date_range = {
+                    "start_date": start_date.strftime("%Y-%m-%d"),
+                    "end_date": end_date.strftime("%Y-%m-%d")
+                }
+            else:
+                # Map selected option to GA4 date range format
+                date_mapping = {
+                    "last_7_days": {"start_date": "7daysAgo", "end_date": "today"},
+                    "last_30_days": {"start_date": "30daysAgo", "end_date": "today"},
+                    "last_90_days": {"start_date": "90daysAgo", "end_date": "today"},
+                    "last_year": {"start_date": "365daysAgo", "end_date": "today"}
+                }
+                date_range = date_mapping[selected_date_range]
             
-            try:
-                # Run the analysis
-                results = st.session_state.analysis_pipeline.run_complete_analysis(
-                    property_id=selected_account['property_id'],
-                    date_range=date_range,
-                    metrics=selected_metrics,
-                    dimensions=selected_dimensions,
-                    analysis_type=selected_analysis_key,
-                    **prompt_params
+            # Get analysis configuration
+            if selected_analysis_key == "general":
+                analysis_config = AnalysisWorkflow.get_weekly_report_config()
+            elif selected_analysis_key == "traffic":
+                analysis_config = AnalysisWorkflow.get_traffic_overview_config()
+            elif selected_analysis_key == "conversion":
+                analysis_config = AnalysisWorkflow.get_conversion_overview_config()
+            elif selected_analysis_key == "user_behavior":
+                analysis_config = AnalysisWorkflow.get_user_behavior_config()
+            elif selected_analysis_key == "comparative":
+                analysis_config = AnalysisWorkflow.get_comparative_report_config()
+            else:
+                analysis_config = AnalysisWorkflow.get_weekly_report_config()
+            
+            # Add date range to config
+            analysis_config["date_range"] = date_range
+            
+            # Create analysis pipeline
+            pipeline = AnalysisPipeline(
+                ga_connector=GoogleAnalyticsConnector(
+                    credentials_path=selected_account['credentials_path']
+                ),
+                insight_generator=AnalyticsInsightGenerator(
+                    llm_provider=LLMFactory.create_provider(
+                        provider="openai",
+                        api_key=api_keys['openai']['api_key']
+                    )
                 )
-                
-                # Generate the report
-                report_content = st.session_state.report_generator.generate_markdown_report(
-                    analysis_results=results,
-                    include_data_summary=True,
-                    include_charts=True
-                )
-                
-                # Save the report
-                report_filename = f"{selected_analysis_key}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                report_path = st.session_state.report_generator.save_report(
-                    report_content=report_content,
-                    filename=report_filename,
-                    format="markdown"
-                )
-                
-                # Save report to database
-                report = add_report(
-                    user_id=st.session_state.user['id'],
-                    title=report_title,
-                    description=report_description,
-                    analysis_type=selected_analysis_key,
-                    report_content=report_content,
-                    metadata=results['metadata'],
-                    file_path=report_path
-                )
-                
-                # Increment prompt usage if a prompt was used
-                if selected_prompt:
-                    increment_prompt_usage(selected_prompt['id'])
-                
-                # Show success message
-                st.success("Analysis completed successfully!")
-                
-                # Display the report
-                st.markdown("## Report Preview")
-                st.markdown(report_content)
-                
-                # Provide download link
-                st.markdown(get_file_download_link(report_path, "Download Report"), unsafe_allow_html=True)
-                
-                # Option to view in report history
-                if st.button("Go to Report History"):
-                    navigate_to('report_history')
-                
-            except Exception as e:
-                st.error(f"Error running analysis: {str(e)}")
+            )
+            
+            # Run analysis
+            results = pipeline.run_complete_analysis(
+                property_id=selected_account['property_id'],
+                metrics=analysis_config['metrics'],
+                dimensions=analysis_config['dimensions'],
+                date_range=analysis_config['date_range'],
+                analysis_type=analysis_config['analysis_type'],
+                custom_prompt=selected_prompt['prompt_template'] if selected_prompt else None
+            )
+            
+            # Generate report
+            report_generator = ReportGenerator()
+            report_content = report_generator.generate_markdown_report(
+                title=report_title,
+                description=report_description,
+                data=results['processed_data'],
+                insights=results['insights'],
+                metadata=results['metadata']
+            )
+            
+            # Save report to file
+            report_path = report_generator.save_report(
+                content=report_content,
+                directory=REPORTS_DIR,
+                filename=f"{selected_analysis_key}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+            )
+            
+            # Save report to database
+            report = add_report(
+                user_id=st.session_state.user['id'],
+                title=report_title,
+                description=report_description,
+                analysis_type=selected_analysis_key,
+                report_content=report_content,
+                metadata=results['metadata'],
+                file_path=report_path
+            )
+            
+            # Increment prompt usage if a prompt was used
+            if selected_prompt:
+                increment_prompt_usage(selected_prompt['id'])
+            
+            # Show success message
+            st.success("Analysis completed successfully!")
+            
+            # Display the report
+            st.markdown("## Report Preview")
+            st.markdown(report_content)
+            
+            # Provide download link
+            st.markdown(get_file_download_link(report_path, "Download Report"), unsafe_allow_html=True)
+            
+            # Option to view in report history
+            if st.button("Go to Report History"):
+                navigate_to('report_history')
+                st.experimental_rerun()
+            
+        except Exception as e:
+            st.error(f"Error running analysis: {str(e)}")
+            logger.error(f"Analysis error: {str(e)}", exc_info=True)
 
 def render_report_history():
     """Render the report history page."""
@@ -1042,6 +941,7 @@ def render_report_history():
         
         if st.button("Create New Analysis"):
             navigate_to('new_analysis')
+            st.experimental_rerun()
         
         return
     
@@ -1090,6 +990,7 @@ def render_report_history():
             if st.button("View", key=f"view_{report['id']}"):
                 st.session_state.selected_report = report
                 navigate_to('view_report')
+                st.experimental_rerun()
             
             # Toggle favorite status
             favorite_label = "Remove Favorite" if report.get('is_favorite') else "Add Favorite"
@@ -1106,6 +1007,7 @@ def render_view_report():
         
         if st.button("Back to Report History"):
             navigate_to('report_history')
+            st.experimental_rerun()
         
         return
     
@@ -1146,11 +1048,13 @@ def render_view_report():
         # Run similar analysis
         if st.button("Run Similar Analysis"):
             navigate_to('new_analysis')
+            st.experimental_rerun()
     
     with col3:
         # Back to report history
         if st.button("Back to Report History"):
             navigate_to('report_history')
+            st.experimental_rerun()
 
 def render_prompt_library():
     """Render the prompt library page."""
@@ -1362,9 +1266,22 @@ def render_settings():
             st.subheader("Connected Accounts")
             
             for account in ga_accounts:
-                st.write(f"**{account['account_name']}**")
-                st.write(f"Property ID: {account['property_id']}")
-                st.write(f"Connected: {account['created_at'][:10]}")
+                col1, col2 = st.columns([3, 1])
+                
+                with col1:
+                    st.write(f"**{account['account_name']}**")
+                    st.write(f"Property ID: {account['property_id']}")
+                    st.write(f"Connected: {account['created_at'][:10]}")
+                
+                with col2:
+                    # Add delete button
+                    if st.button("Delete", key=f"delete_{account['id']}"):
+                        if delete_ga_account(account['id']):
+                            st.success(f"Account {account['account_name']} deleted successfully!")
+                            st.experimental_rerun()
+                        else:
+                            st.error("Failed to delete account")
+                
                 st.markdown("---")
         else:
             st.info("No Google Analytics accounts connected")
@@ -1372,115 +1289,132 @@ def render_settings():
         # Add new account
         st.subheader("Add New Account")
         
-        account_name = st.text_input("Account Name")
-        property_id = st.text_input("Property ID")
+        with st.form("add_ga_account_form"):
+            account_name = st.text_input("Account Name")
+            property_id = st.text_input("Property ID")
+            
+            # Add file uploader for OAuth credentials
+            st.write("**OAuth Credentials**")
+            st.write("Upload your Google OAuth credentials JSON file. This file contains the client ID and secret needed to authenticate with Google Analytics.")
+            uploaded_credentials = st.file_uploader("Upload OAuth Credentials JSON", type=["json"])
+            
+            # Submit button
+            submitted = st.form_submit_button("Add Account")
         
-        # In a real app, you would handle file upload for credentials
-        # Here we'll just use a placeholder path
-        credentials_path = os.path.join(CONFIG_DIR, f"ga_credentials_{st.session_state.user['id']}.json")
-        
-        if st.button("Add Account"):
-            if account_name and property_id:
-                # In a real app, you would save the uploaded credentials file
-                # Here we'll just create a dummy file
-                with open(credentials_path, 'w') as f:
-                    f.write('{"dummy": "credentials"}')
-                
-                # Add the account
-                add_ga_account(
-                    user_id=st.session_state.user['id'],
-                    account_name=account_name,
-                    property_id=property_id,
-                    credentials_path=credentials_path
-                )
-                
-                st.success("Account added successfully!")
-                st.experimental_rerun()
+        if submitted:
+            if account_name and property_id and uploaded_credentials:
+                try:
+                    # Create a unique filename for the credentials
+                    credentials_filename = f"ga_oauth_{st.session_state.user['id']}_{uuid.uuid4()}.json"
+                    
+                    # Save the uploaded credentials file
+                    credentials_path = save_uploaded_file(
+                        uploaded_credentials, 
+                        CREDENTIALS_DIR, 
+                        credentials_filename
+                    )
+                    
+                    # Add the account
+                    add_ga_account(
+                        user_id=st.session_state.user['id'],
+                        account_name=account_name,
+                        property_id=property_id,
+                        credentials_path=credentials_path
+                    )
+                    
+                    st.success("Account added successfully!")
+                    st.experimental_rerun()
+                except Exception as e:
+                    st.error(f"Error adding account: {str(e)}")
+                    logger.error(f"Error adding GA account: {str(e)}", exc_info=True)
             else:
-                st.error("Account name and property ID are required")
+                st.error("Please fill in all fields and upload credentials file")
     
     with tab2:
         st.header("API Keys")
         
-        # Display existing keys
+        # Display existing API keys
         api_keys = get_api_keys(st.session_state.user['id'])
         
         if api_keys:
-            st.subheader("Configured API Keys")
+            st.subheader("Saved API Keys")
             
-            for service, key in api_keys.items():
+            for service, key_data in api_keys.items():
                 st.write(f"**{service.capitalize()}**")
-                st.write(f"Added: {key['created_at'][:10]}")
+                st.write(f"Added: {key_data['created_at'][:10]}")
+                st.write(f"Last Updated: {key_data['updated_at'][:10]}")
+                
+                # Show masked key
+                masked_key = "•" * 20 + key_data['api_key'][-5:] if len(key_data['api_key']) > 5 else "•" * 20
+                st.code(masked_key)
+                
                 st.markdown("---")
         else:
-            st.info("No API keys configured")
+            st.info("No API keys added yet")
         
-        # Add new key
+        # Add new API key
         st.subheader("Add/Update API Key")
         
-        service = st.selectbox("Service", ["openai", "anthropic", "gemini"])
-        api_key = st.text_input("API Key", type="password")
+        with st.form("add_api_key_form"):
+            service = st.selectbox("Service", ["openai", "anthropic", "google", "ollama"])
+            api_key = st.text_input("API Key", type="password")
+            
+            # Submit button
+            submitted = st.form_submit_button("Save API Key")
         
-        if st.button("Save API Key"):
+        if submitted:
             if service and api_key:
-                # Add the key
+                # Add the API key
                 add_api_key(
                     user_id=st.session_state.user['id'],
                     service=service,
                     api_key=api_key
                 )
                 
-                st.success("API key saved successfully!")
+                st.success(f"{service.capitalize()} API key saved successfully!")
                 st.experimental_rerun()
             else:
-                st.error("Service and API key are required")
+                st.error("Please select a service and enter an API key")
     
     with tab3:
         st.header("User Settings")
         
-        # Display user info
+        # Display user information
         st.subheader("User Information")
-        
         st.write(f"**Name:** {st.session_state.user['name']}")
         st.write(f"**Email:** {st.session_state.user['email']}")
         st.write(f"**Account Created:** {st.session_state.user['created_at'][:10]}")
+        st.write(f"**Last Login:** {st.session_state.user['last_login'][:10]}")
         
-        # In a real app, you would allow updating user information
+        # Update user information
         st.subheader("Update Information")
         
-        new_name = st.text_input("Name", value=st.session_state.user['name'])
+        with st.form("update_user_form"):
+            new_name = st.text_input("Name", value=st.session_state.user['name'])
+            
+            # Submit button
+            submitted = st.form_submit_button("Update Information")
         
-        if st.button("Update"):
+        if submitted:
             if new_name:
-                # In a real app, you would update the user information
-                st.success("Information updated successfully!")
+                # Update user information
+                users = load_json_db(USERS_DB)
+                
+                for user in users:
+                    if user['id'] == st.session_state.user['id']:
+                        user['name'] = new_name
+                        break
+                
+                save_json_db(USERS_DB, users)
+                
+                # Update session state
+                st.session_state.user['name'] = new_name
+                
+                st.success("User information updated successfully!")
+                st.experimental_rerun()
             else:
-                st.error("Name is required")
+                st.error("Name cannot be empty")
 
-# Main app
-def main():
-    """Main function to run the Streamlit app."""
-    # Render sidebar
-    render_sidebar()
-    
-    # Render the current page
-    if not st.session_state.authenticated:
-        render_login_page()
-    else:
-        if st.session_state.current_page == 'dashboard':
-            render_dashboard()
-        elif st.session_state.current_page == 'new_analysis':
-            render_new_analysis()
-        elif st.session_state.current_page == 'report_history':
-            render_report_history()
-        elif st.session_state.current_page == 'view_report':
-            render_view_report()
-        elif st.session_state.current_page == 'prompt_library':
-            render_prompt_library()
-        elif st.session_state.current_page == 'settings':
-            render_settings()
-        else:
-            render_dashboard()  # Default to dashboard
-
+# Run the app
 if __name__ == "__main__":
     main()
