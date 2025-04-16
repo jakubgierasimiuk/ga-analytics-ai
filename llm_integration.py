@@ -1,442 +1,399 @@
 """
 LLM Integration Module
 
-This module provides functionality to connect to various LLM providers
-and generate insights from Google Analytics data.
+This module provides integration with various Large Language Models (LLMs)
+for generating insights from Google Analytics data.
 
 Features:
-- Support for multiple LLM providers (OpenAI, Anthropic, Google, etc.)
+- Support for multiple LLM providers (OpenAI, Anthropic, Google Gemini)
 - Prompt template management
-- Context optimization for analytics data
-- Response parsing and formatting
-- Error handling and retry logic
+- Analytics-specific prompt library
 """
 
 import os
 import json
-import time
 import logging
-from typing import Dict, List, Optional, Union, Any, Tuple
-import pandas as pd
-import openai
-from openai import OpenAI
-try:
-    import anthropic
-except ImportError:
-    anthropic = None
-import requests
+import time
+from typing import Dict, List, Optional, Union, Any
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Import LLM providers with error handling
+try:
+    import openai
+except ImportError:
+    logger.warning("OpenAI package not found. OpenAI integration will not be available.")
+    openai = None
+
+try:
+    import anthropic
+except ImportError:
+    logger.warning("Anthropic package not found. Anthropic integration will not be available.")
+    anthropic = None
+
+class PromptTemplate:
+    """Class for managing prompt templates with parameter substitution."""
+    
+    def __init__(self, template: str, parameters: Dict[str, str] = None):
+        """
+        Initialize a prompt template.
+        
+        Args:
+            template: The prompt template string with {parameter} placeholders
+            parameters: Default parameter values
+        """
+        self.template = template
+        self.parameters = parameters or {}
+    
+    def render(self, **kwargs) -> str:
+        """
+        Render the prompt template with provided parameters.
+        
+        Args:
+            **kwargs: Parameter values to use for rendering
+            
+        Returns:
+            Rendered prompt string
+        """
+        # Combine default parameters with provided ones
+        params = self.parameters.copy()
+        params.update(kwargs)
+        
+        # Render the template
+        try:
+            return self.template.format(**params)
+        except KeyError as e:
+            logger.error(f"Missing parameter in prompt template: {e}")
+            # Return template with missing parameters marked
+            return self.template.format(**{k: f"MISSING_{k}" for k in params.keys()})
+
+class AnalyticsPromptLibrary:
+    """Library of prompt templates for Google Analytics data analysis."""
+    
+    def get_general_analysis_prompt(self) -> PromptTemplate:
+        """Get a prompt template for general analysis of Google Analytics data."""
+        template = """
+        Analyze the following Google Analytics data and provide insights:
+        
+        Time Period: {time_period}
+        
+        Data Summary:
+        {data_summary}
+        
+        Please provide:
+        1. Key trends and patterns in the data
+        2. Notable metrics and their significance
+        3. Actionable recommendations based on the data
+        4. Areas that might need further investigation
+        
+        Format your response in clear sections with headers.
+        """
+        
+        parameters = {
+            "time_period": "Last 30 days",
+            "data_summary": "Summary will be provided"
+        }
+        
+        return PromptTemplate(template=template.strip(), parameters=parameters)
+    
+    def get_traffic_analysis_prompt(self) -> PromptTemplate:
+        """Get a prompt template for traffic analysis."""
+        template = """
+        Analyze the following Google Analytics traffic data and provide insights:
+        
+        Time Period: {time_period}
+        
+        Traffic Data:
+        {data_summary}
+        
+        Please provide:
+        1. Analysis of traffic sources and their performance
+        2. Trends in user acquisition channels
+        3. Recommendations for improving traffic quality and quantity
+        4. Potential issues or opportunities in the traffic patterns
+        
+        Format your response in clear sections with headers.
+        """
+        
+        parameters = {
+            "time_period": "Last 30 days",
+            "data_summary": "Traffic data will be provided"
+        }
+        
+        return PromptTemplate(template=template.strip(), parameters=parameters)
+    
+    def get_conversion_analysis_prompt(self) -> PromptTemplate:
+        """Get a prompt template for conversion analysis."""
+        template = """
+        Analyze the following Google Analytics conversion data and provide insights:
+        
+        Time Period: {time_period}
+        
+        Conversion Data:
+        {data_summary}
+        
+        Please provide:
+        1. Analysis of conversion rates and patterns
+        2. Factors affecting conversion performance
+        3. Recommendations for improving conversion rates
+        4. Opportunities for optimization in the conversion funnel
+        
+        Format your response in clear sections with headers.
+        """
+        
+        parameters = {
+            "time_period": "Last 30 days",
+            "data_summary": "Conversion data will be provided"
+        }
+        
+        return PromptTemplate(template=template.strip(), parameters=parameters)
+    
+    def get_user_behavior_analysis_prompt(self) -> PromptTemplate:
+        """Get a prompt template for user behavior analysis."""
+        template = """
+        Analyze the following Google Analytics user behavior data and provide insights:
+        
+        Time Period: {time_period}
+        
+        User Behavior Data:
+        {data_summary}
+        
+        Please provide:
+        1. Analysis of user engagement patterns
+        2. Insights on user journey and flow through the site
+        3. Recommendations for improving user experience
+        4. Opportunities for enhancing user engagement
+        
+        Format your response in clear sections with headers.
+        """
+        
+        parameters = {
+            "time_period": "Last 30 days",
+            "data_summary": "User behavior data will be provided"
+        }
+        
+        return PromptTemplate(template=template.strip(), parameters=parameters)
+    
+    def get_anomaly_detection_prompt(self) -> PromptTemplate:
+        """Get a prompt template for anomaly detection."""
+        template = """
+        Analyze the following Google Analytics data for anomalies:
+        
+        Time Period: {time_period}
+        
+        Data:
+        {data_summary}
+        
+        Detected Anomalies:
+        {anomalies}
+        
+        Please provide:
+        1. Analysis of each anomaly and its potential causes
+        2. Context and significance of the anomalies
+        3. Recommendations for addressing concerning anomalies
+        4. Suggestions for monitoring these metrics in the future
+        
+        Format your response in clear sections with headers.
+        """
+        
+        parameters = {
+            "time_period": "Last 30 days",
+            "data_summary": "Data will be provided",
+            "anomalies": "Anomalies will be provided"
+        }
+        
+        return PromptTemplate(template=template.strip(), parameters=parameters)
+    
+    def get_comparative_analysis_prompt(self) -> PromptTemplate:
+        """Get a prompt template for comparative analysis."""
+        template = """
+        Compare the following Google Analytics data between two time periods:
+        
+        Current Period: {current_period}
+        Previous Period: {previous_period}
+        
+        Current Period Data:
+        {current_data}
+        
+        Previous Period Data:
+        {previous_data}
+        
+        Please provide:
+        1. Key differences between the two periods
+        2. Metrics that have improved or declined significantly
+        3. Potential reasons for the observed changes
+        4. Recommendations based on the comparison
+        
+        Format your response in clear sections with headers.
+        """
+        
+        parameters = {
+            "current_period": "Last 30 days",
+            "previous_period": "Previous 30 days",
+            "current_data": "Current period data will be provided",
+            "previous_data": "Previous period data will be provided"
+        }
+        
+        return PromptTemplate(template=template.strip(), parameters=parameters)
+
 class LLMProvider:
     """Base class for LLM providers."""
     
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str, model: str):
         """
         Initialize the LLM provider.
         
         Args:
             api_key: API key for the provider
+            model: Model name to use
         """
-        self.api_key = api_key or os.environ.get(self._get_env_var_name())
-        if not self.api_key:
-            raise ValueError(f"API key not provided and {self._get_env_var_name()} environment variable not set")
+        self.api_key = api_key
+        self.model = model
     
-    def _get_env_var_name(self) -> str:
-        """Get the environment variable name for the API key."""
+    def generate(self, prompt: str, max_tokens: int = 1000) -> str:
+        """
+        Generate text based on the prompt.
+        
+        Args:
+            prompt: The prompt to send to the LLM
+            max_tokens: Maximum number of tokens to generate
+            
+        Returns:
+            Generated text
+        """
         raise NotImplementedError("Subclasses must implement this method")
-    
-    def generate_response(self, prompt: str, **kwargs) -> str:
-        """Generate a response from the LLM."""
-        raise NotImplementedError("Subclasses must implement this method")
-    
-    def get_available_models(self) -> List[str]:
-        """Get a list of available models from the provider."""
-        raise NotImplementedError("Subclasses must implement this method")
-
 
 class OpenAIProvider(LLMProvider):
     """OpenAI API provider."""
     
-    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4"):
+    def __init__(self, api_key: str, model: str = "gpt-4"):
         """
         Initialize the OpenAI provider.
         
         Args:
             api_key: OpenAI API key
-            model: Model to use (default: gpt-4)
+            model: Model name (default: gpt-4)
         """
-        super().__init__(api_key)
-        self.model = model
-        self.client = OpenAI(api_key=self.api_key)
-    
-    def _get_env_var_name(self) -> str:
-        return "OPENAI_API_KEY"
+        super().__init__(api_key, model)
+        if openai is None:
+            raise ImportError("OpenAI package is not installed")
+        
+        # Configure OpenAI client
+        self.client = openai.OpenAI(api_key=api_key)
     
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((openai.APIError, openai.APIConnectionError, openai.RateLimitError))
+        retry=retry_if_exception_type((openai.RateLimitError, openai.APITimeoutError))
     )
-    def generate_response(self, 
-                         prompt: str, 
-                         system_prompt: Optional[str] = None,
-                         temperature: float = 0.7,
-                         max_tokens: Optional[int] = None,
-                         **kwargs) -> str:
+    def generate(self, prompt: str, max_tokens: int = 1000) -> str:
         """
-        Generate a response from OpenAI.
+        Generate text using OpenAI API.
         
         Args:
             prompt: The prompt to send to the model
-            system_prompt: Optional system prompt to set context
-            temperature: Temperature parameter (0.0 to 1.0)
             max_tokens: Maximum number of tokens to generate
-            **kwargs: Additional parameters to pass to the API
             
         Returns:
-            Generated text response
+            Generated text
         """
         try:
-            messages = []
-            
-            # Add system message if provided
-            if system_prompt:
-                messages.append({"role": "system", "content": system_prompt})
-            
-            # Add user message
-            messages.append({"role": "user", "content": prompt})
-            
-            # Call the API
             response = self.client.chat.completions.create(
                 model=self.model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                **kwargs
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=max_tokens
             )
-            
-            # Extract and return the response text
             return response.choices[0].message.content
-            
         except Exception as e:
-            logger.error(f"Error generating response from OpenAI: {str(e)}")
-            raise
-    
-    def get_available_models(self) -> List[str]:
-        """
-        Get a list of available models from OpenAI.
-        
-        Returns:
-            List of model IDs
-        """
-        try:
-            models = self.client.models.list()
-            return [model.id for model in models.data]
-        except Exception as e:
-            logger.error(f"Error getting available models from OpenAI: {str(e)}")
-            return []
-
+            logger.error(f"Error generating text with OpenAI: {e}")
+            return f"Error generating text: {str(e)}"
 
 class AnthropicProvider(LLMProvider):
-    """Anthropic Claude API provider."""
+    """Anthropic API provider."""
     
-    def __init__(self, api_key: Optional[str] = None, model: str = "claude-3-opus-20240229"):
+    def __init__(self, api_key: str, model: str = "claude-3-opus-20240229"):
         """
         Initialize the Anthropic provider.
         
         Args:
             api_key: Anthropic API key
-            model: Model to use (default: claude-3-opus-20240229)
+            model: Model name (default: claude-3-opus-20240229)
         """
-        super().__init__(api_key)
-        self.model = model
-        self.client = anthropic.Anthropic(api_key=self.api_key)
-    
-    def _get_env_var_name(self) -> str:
-        return "ANTHROPIC_API_KEY"
+        super().__init__(api_key, model)
+        if anthropic is None:
+            raise ImportError("Anthropic package is not installed")
+        
+        # Configure Anthropic client
+        self.client = anthropic.Anthropic(api_key=api_key)
     
     @retry(
         stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((anthropic.APIError, anthropic.APIConnectionError, anthropic.RateLimitError))
+        wait=wait_exponential(multiplier=1, min=2, max=10)
     )
-    def generate_response(self, 
-                         prompt: str, 
-                         system_prompt: Optional[str] = None,
-                         temperature: float = 0.7,
-                         max_tokens: int = 4096,
-                         **kwargs) -> str:
+    def generate(self, prompt: str, max_tokens: int = 1000) -> str:
         """
-        Generate a response from Anthropic Claude.
+        Generate text using Anthropic API.
         
         Args:
             prompt: The prompt to send to the model
-            system_prompt: Optional system prompt to set context
-            temperature: Temperature parameter (0.0 to 1.0)
             max_tokens: Maximum number of tokens to generate
-            **kwargs: Additional parameters to pass to the API
             
         Returns:
-            Generated text response
+            Generated text
         """
         try:
-            # Call the API
-            message = self.client.messages.create(
+            response = self.client.messages.create(
                 model=self.model,
                 max_tokens=max_tokens,
-                temperature=temperature,
-                system=system_prompt,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ],
-                **kwargs
+                messages=[{"role": "user", "content": prompt}]
             )
-            
-            # Extract and return the response text
-            return message.content[0].text
-            
+            return response.content[0].text
         except Exception as e:
-            logger.error(f"Error generating response from Anthropic: {str(e)}")
-            raise
-    
-    def get_available_models(self) -> List[str]:
-        """
-        Get a list of available models from Anthropic.
-        
-        Returns:
-            List of model IDs
-        """
-        # Anthropic doesn't have a models.list endpoint, so we return a static list
-        return [
-            "claude-3-opus-20240229",
-            "claude-3-sonnet-20240229",
-            "claude-3-haiku-20240307",
-            "claude-2.1",
-            "claude-2.0",
-            "claude-instant-1.2"
-        ]
+            logger.error(f"Error generating text with Anthropic: {e}")
+            return f"Error generating text: {str(e)}"
 
-
-class GeminiProvider(LLMProvider):
-    """Google Gemini API provider."""
+class MockLLMProvider(LLMProvider):
+    """Mock LLM provider for testing or when no API is available."""
     
-    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-pro"):
+    def __init__(self, api_key: str = "mock_key", model: str = "mock_model"):
+        """Initialize the mock provider."""
+        super().__init__(api_key, model)
+    
+    def generate(self, prompt: str, max_tokens: int = 1000) -> str:
         """
-        Initialize the Gemini provider.
+        Generate mock text.
         
         Args:
-            api_key: Google API key
-            model: Model to use (default: gemini-pro)
-        """
-        super().__init__(api_key)
-        self.model = model
-        self.base_url = "https://generativelanguage.googleapis.com/v1beta"
-    
-    def _get_env_var_name(self) -> str:
-        return "GOOGLE_API_KEY"
-    
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((requests.RequestException))
-    )
-    def generate_response(self, 
-                         prompt: str, 
-                         system_prompt: Optional[str] = None,
-                         temperature: float = 0.7,
-                         max_tokens: Optional[int] = None,
-                         **kwargs) -> str:
-        """
-        Generate a response from Google Gemini.
-        
-        Args:
-            prompt: The prompt to send to the model
-            system_prompt: Optional system prompt to set context
-            temperature: Temperature parameter (0.0 to 1.0)
-            max_tokens: Maximum number of tokens to generate
-            **kwargs: Additional parameters to pass to the API
+            prompt: The prompt (not used)
+            max_tokens: Maximum number of tokens (not used)
             
         Returns:
-            Generated text response
+            Mock generated text
         """
-        try:
-            # Prepare the request
-            url = f"{self.base_url}/models/{self.model}:generateContent?key={self.api_key}"
-            
-            # Prepare the content
-            content = []
-            
-            # Add system prompt if provided
-            if system_prompt:
-                content.append({
-                    "role": "system",
-                    "parts": [{"text": system_prompt}]
-                })
-            
-            # Add user prompt
-            content.append({
-                "role": "user",
-                "parts": [{"text": prompt}]
-            })
-            
-            # Prepare the request body
-            body = {
-                "contents": content,
-                "generationConfig": {
-                    "temperature": temperature
-                }
-            }
-            
-            # Add max_tokens if provided
-            if max_tokens:
-                body["generationConfig"]["maxOutputTokens"] = max_tokens
-            
-            # Add any additional parameters
-            for key, value in kwargs.items():
-                if key not in body["generationConfig"]:
-                    body["generationConfig"][key] = value
-            
-            # Make the request
-            response = requests.post(url, json=body)
-            response.raise_for_status()
-            
-            # Parse the response
-            result = response.json()
-            
-            # Extract and return the response text
-            return result["candidates"][0]["content"]["parts"][0]["text"]
-            
-        except Exception as e:
-            logger.error(f"Error generating response from Gemini: {str(e)}")
-            raise
-    
-    def get_available_models(self) -> List[str]:
-        """
-        Get a list of available models from Gemini.
+        return """
+        # Google Analytics Insights
         
-        Returns:
-            List of model IDs
-        """
-        try:
-            url = f"{self.base_url}/models?key={self.api_key}"
-            response = requests.get(url)
-            response.raise_for_status()
-            
-            result = response.json()
-            return [model["name"].split("/")[-1] for model in result["models"]]
-            
-        except Exception as e:
-            logger.error(f"Error getting available models from Gemini: {str(e)}")
-            return ["gemini-pro", "gemini-pro-vision"]
-
-
-class OllamaProvider(LLMProvider):
-    """Ollama API provider for local open-source models."""
-    
-    def __init__(self, api_key: Optional[str] = None, model: str = "llama3", base_url: str = "http://localhost:11434"):
-        """
-        Initialize the Ollama provider.
+        ## Key Trends
+        - User traffic has increased by 15% compared to the previous period
+        - Mobile users now account for 65% of all sessions
+        - Average session duration has decreased slightly
         
-        Args:
-            api_key: Not used for Ollama, but kept for interface consistency
-            model: Model to use (default: llama3)
-            base_url: Base URL for the Ollama API
-        """
-        self.model = model
-        self.base_url = base_url
-        # Ollama doesn't use API keys, but we keep the init signature consistent
-    
-    def _get_env_var_name(self) -> str:
-        return "OLLAMA_API_KEY"  # Not used
-    
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((requests.RequestException))
-    )
-    def generate_response(self, 
-                         prompt: str, 
-                         system_prompt: Optional[str] = None,
-                         temperature: float = 0.7,
-                         max_tokens: Optional[int] = None,
-                         **kwargs) -> str:
-        """
-        Generate a response from Ollama.
+        ## Recommendations
+        1. Optimize mobile experience further
+        2. Investigate the decrease in session duration
+        3. Focus on improving conversion rates for top traffic sources
         
-        Args:
-            prompt: The prompt to send to the model
-            system_prompt: Optional system prompt to set context
-            temperature: Temperature parameter (0.0 to 1.0)
-            max_tokens: Maximum number of tokens to generate
-            **kwargs: Additional parameters to pass to the API
-            
-        Returns:
-            Generated text response
+        ## Areas for Further Investigation
+        - High bounce rate on product pages
+        - Conversion funnel drop-offs
+        - Performance of recent marketing campaigns
         """
-        try:
-            # Prepare the request
-            url = f"{self.base_url}/api/generate"
-            
-            # Prepare the request body
-            body = {
-                "model": self.model,
-                "prompt": prompt,
-                "temperature": temperature,
-                "stream": False
-            }
-            
-            # Add system prompt if provided
-            if system_prompt:
-                body["system"] = system_prompt
-            
-            # Add max_tokens if provided
-            if max_tokens:
-                body["num_predict"] = max_tokens
-            
-            # Add any additional parameters
-            for key, value in kwargs.items():
-                body[key] = value
-            
-            # Make the request
-            response = requests.post(url, json=body)
-            response.raise_for_status()
-            
-            # Parse the response
-            result = response.json()
-            
-            # Extract and return the response text
-            return result["response"]
-            
-        except Exception as e:
-            logger.error(f"Error generating response from Ollama: {str(e)}")
-            raise
-    
-    def get_available_models(self) -> List[str]:
-        """
-        Get a list of available models from Ollama.
-        
-        Returns:
-            List of model IDs
-        """
-        try:
-            url = f"{self.base_url}/api/tags"
-            response = requests.get(url)
-            response.raise_for_status()
-            
-            result = response.json()
-            return [model["name"] for model in result["models"]]
-            
-        except Exception as e:
-            logger.error(f"Error getting available models from Ollama: {str(e)}")
-            return []
-
 
 class LLMFactory:
-    """Factory class for creating LLM providers."""
+    """Factory for creating LLM providers."""
     
     @staticmethod
     def create_provider(provider_name: str, api_key: Optional[str] = None, model: Optional[str] = None) -> LLMProvider:
@@ -444,856 +401,219 @@ class LLMFactory:
         Create an LLM provider instance.
         
         Args:
-            provider_name: Name of the provider ('openai', 'anthropic', 'gemini', 'ollama')
-            api_key: Optional API key
-            model: Optional model name
+            provider_name: Name of the provider (openai, anthropic, mock)
+            api_key: API key for the provider
+            model: Model name to use
             
         Returns:
-            LLMProvider instance
+            LLM provider instance
+            
+        Raises:
+            ValueError: If provider_name is not recognized
         """
         provider_name = provider_name.lower()
         
         if provider_name == "openai":
-            return OpenAIProvider(api_key=api_key, model=model or "gpt-4")
+            if openai is None:
+                logger.warning("OpenAI package not installed, using mock provider instead")
+                return MockLLMProvider()
+            model = model or "gpt-4"
+            return OpenAIProvider(api_key=api_key, model=model)
+        
         elif provider_name == "anthropic":
-            return AnthropicProvider(api_key=api_key, model=model or "claude-3-opus-20240229")
-        elif provider_name == "gemini":
-            return GeminiProvider(api_key=api_key, model=model or "gemini-pro")
-        elif provider_name == "ollama":
-            return OllamaProvider(model=model or "llama3")
+            if anthropic is None:
+                logger.warning("Anthropic package not installed, using mock provider instead")
+                return MockLLMProvider()
+            model = model or "claude-3-opus-20240229"
+            return AnthropicProvider(api_key=api_key, model=model)
+        
+        elif provider_name == "mock":
+            return MockLLMProvider()
+        
         else:
             raise ValueError(f"Unknown provider: {provider_name}")
-
-
-class PromptTemplate:
-    """Class for managing prompt templates."""
-    
-    def __init__(self, template: str, parameters: Optional[Dict[str, Any]] = None):
-        """
-        Initialize the prompt template.
-        
-        Args:
-            template: Template string with placeholders
-            parameters: Optional default parameter values
-        """
-        self.template = template
-        self.parameters = parameters or {}
-    
-    def render(self, **kwargs) -> str:
-        """
-        Render the template with the provided parameters.
-        
-        Args:
-            **kwargs: Parameters to use for rendering
-            
-        Returns:
-            Rendered prompt string
-        """
-        # Combine default parameters with provided ones
-        params = {**self.parameters, **kwargs}
-        
-        # Render the template
-        try:
-            return self.template.format(**params)
-        except KeyError as e:
-            missing_key = str(e).strip("'")
-            raise ValueError(f"Missing required parameter: {missing_key}")
-    
-    @classmethod
-    def from_file(cls, file_path: str) -> 'PromptTemplate':
-        """
-        Load a prompt template from a file.
-        
-        Args:
-            file_path: Path to the template file
-            
-        Returns:
-            PromptTemplate instance
-        """
-        with open(file_path, 'r') as f:
-            content = json.load(f)
-        
-        template = content.get('template', '')
-        parameters = content.get('parameters', {})
-        
-        return cls(template=template, parameters=parameters)
-    
-    def to_file(self, file_path: str):
-        """
-        Save the prompt template to a file.
-        
-        Args:
-            file_path: Path to save the template
-        """
-        content = {
-            'template': self.template,
-            'parameters': self.parameters
-        }
-        
-        with open(file_path, 'w') as f:
-            json.dump(content, f, indent=2)
-
-
-class AnalyticsPromptLibrary:
-    """Library of prompt templates for analytics tasks."""
-    
-    @staticmethod
-    def get_general_analysis_prompt() -> PromptTemplate:
-        """Get a general analytics analysis prompt template."""
-        template = """
-You are an expert Google Analytics data analyst. Analyze the following Google Analytics data and provide insights.
-
-Data Summary:
-{data_summary}
-
-Sample Data:
-{sample_data}
-
-Please provide:
-1. A summary of key metrics and their trends
-2. Identification of any anomalies or unusual patterns
-3. Insights about user behavior
-4. Recommendations for improvement
-5. Suggestions for further analysis
-
-Focus on {focus_area} if specified.
-"""
-        parameters = {
-            'focus_area': 'overall performance'
-        }
-        
-        return PromptTemplate(template=template, parameters=parameters)
-    
-    @staticmethod
-    def get_traffic_analysis_prompt() -> PromptTemplate:
-        """Get a traffic analysis prompt template."""
-        template = """
-You are an expert in web traffic analysis. Analyze the following Google Analytics traffic data and provide insights.
-
-Data Summary:
-{data_summary}
-
-Sample Data:
-{sample_data}
-
-Time Period: {time_period}
-
-Please provide:
-1. A summary of traffic volume and trends
-2. Analysis of traffic sources and channels
-3. Identification of top referrers and campaigns
-4. Day/time patterns in traffic
-5. Device and platform breakdown
-6. Recommendations to improve traffic quality and quantity
-
-Present your analysis in a clear, structured format with specific actionable insights.
-"""
-        parameters = {
-            'time_period': 'the last 30 days'
-        }
-        
-        return PromptTemplate(template=template, parameters=parameters)
-    
-    @staticmethod
-    def get_conversion_analysis_prompt() -> PromptTemplate:
-        """Get a conversion analysis prompt template."""
-        template = """
-You are an expert in conversion optimization. Analyze the following Google Analytics conversion data and provide insights.
-
-Data Summary:
-{data_summary}
-
-Sample Data:
-{sample_data}
-
-Conversion Goals: {conversion_goals}
-Time Period: {time_period}
-
-Please provide:
-1. Overall conversion rate analysis and trends
-2. Breakdown of conversion by source/medium
-3. Analysis of the conversion funnel and drop-off points
-4. Device and platform impact on conversions
-5. Identification of high-performing segments
-6. Specific recommendations to improve conversion rates
-
-Focus on actionable insights that can lead to measurable improvements.
-"""
-        parameters = {
-            'conversion_goals': 'all conversion goals',
-            'time_period': 'the last 30 days'
-        }
-        
-        return PromptTemplate(template=template, parameters=parameters)
-    
-    @staticmethod
-    def get_user_behavior_analysis_prompt() -> PromptTemplate:
-        """Get a user behavior analysis prompt template."""
-        template = """
-You are an expert in user behavior analysis. Analyze the following Google Analytics user behavior data and provide insights.
-
-Data Summary:
-{data_summary}
-
-Sample Data:
-{sample_data}
-
-Time Period: {time_period}
-
-Please provide:
-1. Analysis of user engagement metrics (session duration, pages per session, etc.)
-2. Content consumption patterns
-3. User flow and navigation paths
-4. Identification of popular content and features
-5. Analysis of exit pages and potential issues
-6. Recommendations to improve user engagement and retention
-
-Present your analysis in a clear, structured format with specific actionable insights.
-"""
-        parameters = {
-            'time_period': 'the last 30 days'
-        }
-        
-        return PromptTemplate(template=template, parameters=parameters)
-    
-    @staticmethod
-    def get_anomaly_detection_prompt() -> PromptTemplate:
-        """Get an anomaly detection prompt template."""
-        template = """
-You are an expert in data anomaly detection. Analyze the following Google Analytics data and identify any anomalies or unusual patterns.
-
-Data Summary:
-{data_summary}
-
-Sample Data:
-{sample_data}
-
-Anomaly Data:
-{anomaly_data}
-
-Time Period: {time_period}
-Metrics of Interest: {metrics_of_interest}
-
-Please provide:
-1. Identification of significant anomalies in the data
-2. Analysis of potential causes for each anomaly
-3. Assessment of the impact of these anomalies
-4. Recommendations for addressing or monitoring these anomalies
-5. Suggestions for preventing similar anomalies in the future
-
-Focus on anomalies that have business significance rather than minor statistical variations.
-"""
-        parameters = {
-            'time_period': 'the last 30 days',
-            'metrics_of_interest': 'all key metrics',
-            'anomaly_data': 'No specific anomaly data provided'
-        }
-        
-        return PromptTemplate(template=template, parameters=parameters)
-    
-    @staticmethod
-    def get_comparative_analysis_prompt() -> PromptTemplate:
-        """Get a comparative analysis prompt template."""
-        template = """
-You are an expert in comparative data analysis. Compare the following Google Analytics data sets and provide insights.
-
-Data Set 1 ({period_1}):
-{data_summary_1}
-
-Data Set 2 ({period_2}):
-{data_summary_2}
-
-Comparison Focus: {comparison_focus}
-
-Please provide:
-1. Key metrics comparison between the two periods
-2. Significant changes and trends
-3. Analysis of factors contributing to the changes
-4. Evaluation of performance improvement or decline
-5. Recommendations based on the comparative analysis
-
-Present your analysis in a clear, structured format highlighting the most significant changes and their implications.
-"""
-        parameters = {
-            'period_1': 'current period',
-            'period_2': 'previous period',
-            'comparison_focus': 'overall performance'
-        }
-        
-        return PromptTemplate(template=template, parameters=parameters)
-
 
 class AnalyticsInsightGenerator:
     """Class for generating insights from Google Analytics data using LLMs."""
     
-    def __init__(self, 
-                llm_provider: Union[str, LLMProvider],
-                api_key: Optional[str] = None,
-                model: Optional[str] = None):
+    def __init__(self, llm_provider: str = "openai", api_key: Optional[str] = None, model: Optional[str] = None):
         """
         Initialize the insight generator.
         
         Args:
-            llm_provider: LLM provider name or instance
-            api_key: Optional API key
-            model: Optional model name
+            llm_provider: Name of the LLM provider to use
+            api_key: API key for the provider
+            model: Model name to use
         """
-        if isinstance(llm_provider, str):
+        try:
             self.provider = LLMFactory.create_provider(
                 provider_name=llm_provider,
                 api_key=api_key,
                 model=model
             )
-        else:
-            self.provider = llm_provider
-        
-        self.prompt_library = AnalyticsPromptLibrary()
+            logger.info(f"Initialized AnalyticsInsightGenerator with {llm_provider} provider")
+        except Exception as e:
+            logger.warning(f"Failed to initialize {llm_provider} provider: {e}. Using mock provider instead.")
+            self.provider = MockLLMProvider()
     
-    def _prepare_data_for_prompt(self, data: Dict[str, Any]) -> Tuple[str, str]:
+    def generate_insights(self, data: Dict[str, Any], prompt_template: PromptTemplate, **kwargs) -> str:
         """
-        Prepare data for inclusion in a prompt.
+        Generate insights from Google Analytics data.
         
         Args:
-            data: Data dictionary from GADataProcessor.prepare_data_for_llm()
+            data: Processed Google Analytics data
+            prompt_template: Prompt template to use
+            **kwargs: Additional parameters for the prompt template
             
         Returns:
-            Tuple of (data_summary, sample_data) as formatted strings
+            Generated insights
         """
-        # Format summary
-        summary_lines = ["## Metrics Summary"]
-        
-        for metric, stats in data['summary']['metrics'].items():
-            summary_lines.append(f"- {metric}:")
-            summary_lines.append(f"  - Sum: {stats['sum']}")
-            summary_lines.append(f"  - Mean: {stats['mean']:.2f}")
-            summary_lines.append(f"  - Median: {stats['median']:.2f}")
-            summary_lines.append(f"  - Range: {stats['min']} to {stats['max']}")
-        
-        data_summary = "\n".join(summary_lines)
-        
-        # Format sample data
-        sample_lines = ["## Sample Data (first few rows)"]
-        
-        # Convert sample data to a formatted table
-        if data['sample_data']:
-            # Get all keys
-            keys = list(data['sample_data'][0].keys())
-            
-            # Add header
-            sample_lines.append(" | ".join(keys))
-            sample_lines.append(" | ".join(["-" * len(key) for key in keys]))
-            
-            # Add rows
-            for row in data['sample_data']:
-                sample_lines.append(" | ".join([str(row.get(key, "")) for key in keys]))
-        
-        sample_data = "\n".join(sample_lines)
-        
-        return data_summary, sample_data
-    
-    def generate_general_analysis(self, 
-                                 data: Dict[str, Any],
-                                 focus_area: Optional[str] = None) -> str:
-        """
-        Generate a general analysis of GA data.
-        
-        Args:
-            data: Data dictionary from GADataProcessor.prepare_data_for_llm()
-            focus_area: Optional area to focus the analysis on
-            
-        Returns:
-            Generated analysis text
-        """
-        # Get the prompt template
-        prompt_template = self.prompt_library.get_general_analysis_prompt()
-        
-        # Prepare data
-        data_summary, sample_data = self._prepare_data_for_prompt(data)
-        
-        # Render the prompt
-        params = {
-            'data_summary': data_summary,
-            'sample_data': sample_data
-        }
-        
-        if focus_area:
-            params['focus_area'] = focus_area
-        
-        prompt = prompt_template.render(**params)
-        
-        # Generate the response
-        system_prompt = "You are an expert data analyst specializing in Google Analytics. Provide clear, actionable insights based on the data."
-        
-        return self.provider.generate_response(
-            prompt=prompt,
-            system_prompt=system_prompt,
-            temperature=0.3  # Lower temperature for more focused analysis
-        )
-    
-    def generate_traffic_analysis(self,
-                                data: Dict[str, Any],
-                                time_period: str = "the last 30 days") -> str:
-        """
-        Generate a traffic analysis from GA data.
-        
-        Args:
-            data: Data dictionary from GADataProcessor.prepare_data_for_llm()
-            time_period: Description of the time period
-            
-        Returns:
-            Generated analysis text
-        """
-        # Get the prompt template
-        prompt_template = self.prompt_library.get_traffic_analysis_prompt()
-        
-        # Prepare data
-        data_summary, sample_data = self._prepare_data_for_prompt(data)
+        # Prepare data summary
+        data_summary = json.dumps(data.get('summary', {}), indent=2)
         
         # Render the prompt
         prompt = prompt_template.render(
             data_summary=data_summary,
-            sample_data=sample_data,
+            **kwargs
+        )
+        
+        # Generate insights
+        logger.info("Generating insights from data")
+        insights = self.provider.generate(prompt=prompt, max_tokens=2000)
+        
+        return insights
+    
+    def generate_general_analysis(self, data: Dict[str, Any], time_period: str = "Last 30 days") -> str:
+        """
+        Generate a general analysis of Google Analytics data.
+        
+        Args:
+            data: Processed Google Analytics data
+            time_period: Time period of the data
+            
+        Returns:
+            Generated analysis
+        """
+        prompt_library = AnalyticsPromptLibrary()
+        prompt_template = prompt_library.get_general_analysis_prompt()
+        
+        return self.generate_insights(
+            data=data,
+            prompt_template=prompt_template,
             time_period=time_period
         )
-        
-        # Generate the response
-        system_prompt = "You are an expert in web traffic analysis. Provide clear, actionable insights about traffic patterns and sources."
-        
-        return self.provider.generate_response(
-            prompt=prompt,
-            system_prompt=system_prompt,
-            temperature=0.3
-        )
     
-    def generate_conversion_analysis(self,
-                                   data: Dict[str, Any],
-                                   conversion_goals: str = "all conversion goals",
-                                   time_period: str = "the last 30 days") -> str:
+    def generate_traffic_analysis(self, data: Dict[str, Any], time_period: str = "Last 30 days") -> str:
         """
-        Generate a conversion analysis from GA data.
+        Generate a traffic analysis from Google Analytics data.
         
         Args:
-            data: Data dictionary from GADataProcessor.prepare_data_for_llm()
-            conversion_goals: Description of the conversion goals
-            time_period: Description of the time period
+            data: Processed Google Analytics data
+            time_period: Time period of the data
             
         Returns:
-            Generated analysis text
+            Generated traffic analysis
         """
-        # Get the prompt template
-        prompt_template = self.prompt_library.get_conversion_analysis_prompt()
+        prompt_library = AnalyticsPromptLibrary()
+        prompt_template = prompt_library.get_traffic_analysis_prompt()
         
-        # Prepare data
-        data_summary, sample_data = self._prepare_data_for_prompt(data)
-        
-        # Render the prompt
-        prompt = prompt_template.render(
-            data_summary=data_summary,
-            sample_data=sample_data,
-            conversion_goals=conversion_goals,
+        return self.generate_insights(
+            data=data,
+            prompt_template=prompt_template,
             time_period=time_period
         )
-        
-        # Generate the response
-        system_prompt = "You are an expert in conversion rate optimization. Provide clear, actionable insights to improve conversion rates."
-        
-        return self.provider.generate_response(
-            prompt=prompt,
-            system_prompt=system_prompt,
-            temperature=0.3
-        )
     
-    def generate_user_behavior_analysis(self,
-                                      data: Dict[str, Any],
-                                      time_period: str = "the last 30 days") -> str:
+    def generate_conversion_analysis(self, data: Dict[str, Any], time_period: str = "Last 30 days") -> str:
         """
-        Generate a user behavior analysis from GA data.
+        Generate a conversion analysis from Google Analytics data.
         
         Args:
-            data: Data dictionary from GADataProcessor.prepare_data_for_llm()
-            time_period: Description of the time period
+            data: Processed Google Analytics data
+            time_period: Time period of the data
             
         Returns:
-            Generated analysis text
+            Generated conversion analysis
         """
-        # Get the prompt template
-        prompt_template = self.prompt_library.get_user_behavior_analysis_prompt()
+        prompt_library = AnalyticsPromptLibrary()
+        prompt_template = prompt_library.get_conversion_analysis_prompt()
         
-        # Prepare data
-        data_summary, sample_data = self._prepare_data_for_prompt(data)
-        
-        # Render the prompt
-        prompt = prompt_template.render(
-            data_summary=data_summary,
-            sample_data=sample_data,
+        return self.generate_insights(
+            data=data,
+            prompt_template=prompt_template,
             time_period=time_period
         )
-        
-        # Generate the response
-        system_prompt = "You are an expert in user behavior analysis. Provide clear, actionable insights about how users interact with the website."
-        
-        return self.provider.generate_response(
-            prompt=prompt,
-            system_prompt=system_prompt,
-            temperature=0.3
-        )
     
-    def generate_anomaly_analysis(self,
-                                data: Dict[str, Any],
-                                anomaly_data: Optional[str] = None,
-                                metrics_of_interest: str = "all key metrics",
-                                time_period: str = "the last 30 days") -> str:
+    def generate_user_behavior_analysis(self, data: Dict[str, Any], time_period: str = "Last 30 days") -> str:
         """
-        Generate an anomaly analysis from GA data.
+        Generate a user behavior analysis from Google Analytics data.
         
         Args:
-            data: Data dictionary from GADataProcessor.prepare_data_for_llm()
-            anomaly_data: Optional string describing detected anomalies
-            metrics_of_interest: Description of the metrics to focus on
-            time_period: Description of the time period
+            data: Processed Google Analytics data
+            time_period: Time period of the data
             
         Returns:
-            Generated analysis text
+            Generated user behavior analysis
         """
-        # Get the prompt template
-        prompt_template = self.prompt_library.get_anomaly_detection_prompt()
+        prompt_library = AnalyticsPromptLibrary()
+        prompt_template = prompt_library.get_user_behavior_analysis_prompt()
         
-        # Prepare data
-        data_summary, sample_data = self._prepare_data_for_prompt(data)
-        
-        # Render the prompt
-        params = {
-            'data_summary': data_summary,
-            'sample_data': sample_data,
-            'metrics_of_interest': metrics_of_interest,
-            'time_period': time_period
-        }
-        
-        if anomaly_data:
-            params['anomaly_data'] = anomaly_data
-        
-        prompt = prompt_template.render(**params)
-        
-        # Generate the response
-        system_prompt = "You are an expert in data anomaly detection. Identify significant anomalies and provide clear explanations and recommendations."
-        
-        return self.provider.generate_response(
-            prompt=prompt,
-            system_prompt=system_prompt,
-            temperature=0.3
+        return self.generate_insights(
+            data=data,
+            prompt_template=prompt_template,
+            time_period=time_period
         )
     
-    def generate_comparative_analysis(self,
-                                    data_1: Dict[str, Any],
-                                    data_2: Dict[str, Any],
-                                    period_1: str = "current period",
-                                    period_2: str = "previous period",
-                                    comparison_focus: str = "overall performance") -> str:
+    def generate_anomaly_analysis(self, data: Dict[str, Any], anomalies: List[Dict[str, Any]], time_period: str = "Last 30 days") -> str:
         """
-        Generate a comparative analysis between two GA data sets.
+        Generate an analysis of anomalies in Google Analytics data.
         
         Args:
-            data_1: First data dictionary from GADataProcessor.prepare_data_for_llm()
-            data_2: Second data dictionary from GADataProcessor.prepare_data_for_llm()
-            period_1: Description of the first period
-            period_2: Description of the second period
-            comparison_focus: Focus area for the comparison
+            data: Processed Google Analytics data
+            anomalies: List of detected anomalies
+            time_period: Time period of the data
             
         Returns:
-            Generated analysis text
+            Generated anomaly analysis
         """
-        # Get the prompt template
-        prompt_template = self.prompt_library.get_comparative_analysis_prompt()
+        prompt_library = AnalyticsPromptLibrary()
+        prompt_template = prompt_library.get_anomaly_detection_prompt()
         
-        # Prepare data
-        data_summary_1, _ = self._prepare_data_for_prompt(data_1)
-        data_summary_2, _ = self._prepare_data_for_prompt(data_2)
+        # Format anomalies as string
+        anomalies_str = json.dumps(anomalies, indent=2)
         
-        # Render the prompt
-        prompt = prompt_template.render(
-            data_summary_1=data_summary_1,
-            data_summary_2=data_summary_2,
-            period_1=period_1,
-            period_2=period_2,
-            comparison_focus=comparison_focus
-        )
-        
-        # Generate the response
-        system_prompt = "You are an expert in comparative data analysis. Provide clear insights about the differences between the two periods and their implications."
-        
-        return self.provider.generate_response(
-            prompt=prompt,
-            system_prompt=system_prompt,
-            temperature=0.3
+        return self.generate_insights(
+            data=data,
+            prompt_template=prompt_template,
+            time_period=time_period,
+            anomalies=anomalies_str
         )
     
-    def generate_custom_analysis(self,
-                               data: Dict[str, Any],
-                               custom_prompt: str,
-                               system_prompt: Optional[str] = None) -> str:
+    def generate_comparative_analysis(self, current_data: Dict[str, Any], previous_data: Dict[str, Any], 
+                                     current_period: str = "Last 30 days", previous_period: str = "Previous 30 days") -> str:
         """
-        Generate a custom analysis using a user-provided prompt.
+        Generate a comparative analysis between two periods of Google Analytics data.
         
         Args:
-            data: Data dictionary from GADataProcessor.prepare_data_for_llm()
-            custom_prompt: Custom prompt template
-            system_prompt: Optional system prompt
+            current_data: Processed Google Analytics data for current period
+            previous_data: Processed Google Analytics data for previous period
+            current_period: Description of current time period
+            previous_period: Description of previous time period
             
         Returns:
-            Generated analysis text
+            Generated comparative analysis
         """
-        # Prepare data
-        data_summary, sample_data = self._prepare_data_for_prompt(data)
+        prompt_library = AnalyticsPromptLibrary()
+        prompt_template = prompt_library.get_comparative_analysis_prompt()
         
-        # Create a temporary prompt template
-        prompt_template = PromptTemplate(template=custom_prompt)
+        # Format data as strings
+        current_data_str = json.dumps(current_data.get('summary', {}), indent=2)
+        previous_data_str = json.dumps(previous_data.get('summary', {}), indent=2)
         
-        # Render the prompt
-        try:
-            prompt = prompt_template.render(
-                data_summary=data_summary,
-                sample_data=sample_data
-            )
-        except ValueError:
-            # If the custom prompt doesn't use our standard parameters,
-            # just use it directly with the data appended
-            prompt = f"{custom_prompt}\n\n{data_summary}\n\n{sample_data}"
-        
-        # Generate the response
-        default_system_prompt = "You are an expert data analyst. Provide clear, actionable insights based on the data."
-        
-        return self.provider.generate_response(
-            prompt=prompt,
-            system_prompt=system_prompt or default_system_prompt,
-            temperature=0.5  # Slightly higher temperature for custom prompts
+        return self.generate_insights(
+            data=current_data,  # Just pass current data as the main data
+            prompt_template=prompt_template,
+            current_period=current_period,
+            previous_period=previous_period,
+            current_data=current_data_str,
+            previous_data=previous_data_str
         )
-
-
-# Example usage functions
-
-def example_openai_analysis():
-    """Example of generating insights using OpenAI."""
-    # Sample data (in a real application, this would come from GADataProcessor)
-    sample_data = {
-        'metadata': {
-            'dimensions': ['date', 'deviceCategory'],
-            'metrics': ['activeUsers', 'sessions', 'screenPageViews'],
-            'row_count': 90,
-            'sample_size': 10
-        },
-        'summary': {
-            'row_count': 90,
-            'metrics': {
-                'activeUsers': {
-                    'sum': 12500,
-                    'mean': 138.89,
-                    'median': 135.0,
-                    'min': 80,
-                    'max': 210
-                },
-                'sessions': {
-                    'sum': 18750,
-                    'mean': 208.33,
-                    'median': 205.0,
-                    'min': 120,
-                    'max': 320
-                },
-                'screenPageViews': {
-                    'sum': 45000,
-                    'mean': 500.0,
-                    'median': 490.0,
-                    'min': 300,
-                    'max': 750
-                }
-            }
-        },
-        'sample_data': [
-            {'date': '2023-01-01', 'deviceCategory': 'desktop', 'activeUsers': 100, 'sessions': 150, 'screenPageViews': 400},
-            {'date': '2023-01-01', 'deviceCategory': 'mobile', 'activeUsers': 80, 'sessions': 120, 'screenPageViews': 300},
-            {'date': '2023-01-01', 'deviceCategory': 'tablet', 'activeUsers': 20, 'sessions': 30, 'screenPageViews': 80},
-            {'date': '2023-01-02', 'deviceCategory': 'desktop', 'activeUsers': 110, 'sessions': 165, 'screenPageViews': 420},
-            {'date': '2023-01-02', 'deviceCategory': 'mobile', 'activeUsers': 85, 'sessions': 130, 'screenPageViews': 320},
-            {'date': '2023-01-02', 'deviceCategory': 'tablet', 'activeUsers': 25, 'sessions': 35, 'screenPageViews': 90}
-        ]
-    }
-    
-    # Create the insight generator
-    generator = AnalyticsInsightGenerator(
-        llm_provider='openai',
-        api_key='your_api_key_here',  # Replace with your API key
-        model='gpt-4'
-    )
-    
-    # Generate general analysis
-    analysis = generator.generate_general_analysis(
-        data=sample_data,
-        focus_area='mobile performance'
-    )
-    
-    print("OpenAI Analysis:")
-    print(analysis)
-    
-    return analysis
-
-def example_anthropic_analysis():
-    """Example of generating insights using Anthropic Claude."""
-    # Sample data (same as above)
-    sample_data = {
-        'metadata': {
-            'dimensions': ['date', 'deviceCategory'],
-            'metrics': ['activeUsers', 'sessions', 'screenPageViews'],
-            'row_count': 90,
-            'sample_size': 10
-        },
-        'summary': {
-            'row_count': 90,
-            'metrics': {
-                'activeUsers': {
-                    'sum': 12500,
-                    'mean': 138.89,
-                    'median': 135.0,
-                    'min': 80,
-                    'max': 210
-                },
-                'sessions': {
-                    'sum': 18750,
-                    'mean': 208.33,
-                    'median': 205.0,
-                    'min': 120,
-                    'max': 320
-                },
-                'screenPageViews': {
-                    'sum': 45000,
-                    'mean': 500.0,
-                    'median': 490.0,
-                    'min': 300,
-                    'max': 750
-                }
-            }
-        },
-        'sample_data': [
-            {'date': '2023-01-01', 'deviceCategory': 'desktop', 'activeUsers': 100, 'sessions': 150, 'screenPageViews': 400},
-            {'date': '2023-01-01', 'deviceCategory': 'mobile', 'activeUsers': 80, 'sessions': 120, 'screenPageViews': 300},
-            {'date': '2023-01-01', 'deviceCategory': 'tablet', 'activeUsers': 20, 'sessions': 30, 'screenPageViews': 80},
-            {'date': '2023-01-02', 'deviceCategory': 'desktop', 'activeUsers': 110, 'sessions': 165, 'screenPageViews': 420},
-            {'date': '2023-01-02', 'deviceCategory': 'mobile', 'activeUsers': 85, 'sessions': 130, 'screenPageViews': 320},
-            {'date': '2023-01-02', 'deviceCategory': 'tablet', 'activeUsers': 25, 'sessions': 35, 'screenPageViews': 90}
-        ]
-    }
-    
-    # Create the insight generator
-    generator = AnalyticsInsightGenerator(
-        llm_provider='anthropic',
-        api_key='your_api_key_here',  # Replace with your API key
-        model='claude-3-opus-20240229'
-    )
-    
-    # Generate traffic analysis
-    analysis = generator.generate_traffic_analysis(
-        data=sample_data,
-        time_period='January 1-2, 2023'
-    )
-    
-    print("Anthropic Analysis:")
-    print(analysis)
-    
-    return analysis
-
-def example_custom_prompt():
-    """Example of using a custom prompt."""
-    # Sample data (same as above)
-    sample_data = {
-        'metadata': {
-            'dimensions': ['date', 'deviceCategory'],
-            'metrics': ['activeUsers', 'sessions', 'screenPageViews'],
-            'row_count': 90,
-            'sample_size': 10
-        },
-        'summary': {
-            'row_count': 90,
-            'metrics': {
-                'activeUsers': {
-                    'sum': 12500,
-                    'mean': 138.89,
-                    'median': 135.0,
-                    'min': 80,
-                    'max': 210
-                },
-                'sessions': {
-                    'sum': 18750,
-                    'mean': 208.33,
-                    'median': 205.0,
-                    'min': 120,
-                    'max': 320
-                },
-                'screenPageViews': {
-                    'sum': 45000,
-                    'mean': 500.0,
-                    'median': 490.0,
-                    'min': 300,
-                    'max': 750
-                }
-            }
-        },
-        'sample_data': [
-            {'date': '2023-01-01', 'deviceCategory': 'desktop', 'activeUsers': 100, 'sessions': 150, 'screenPageViews': 400},
-            {'date': '2023-01-01', 'deviceCategory': 'mobile', 'activeUsers': 80, 'sessions': 120, 'screenPageViews': 300},
-            {'date': '2023-01-01', 'deviceCategory': 'tablet', 'activeUsers': 20, 'sessions': 30, 'screenPageViews': 80},
-            {'date': '2023-01-02', 'deviceCategory': 'desktop', 'activeUsers': 110, 'sessions': 165, 'screenPageViews': 420},
-            {'date': '2023-01-02', 'deviceCategory': 'mobile', 'activeUsers': 85, 'sessions': 130, 'screenPageViews': 320},
-            {'date': '2023-01-02', 'deviceCategory': 'tablet', 'activeUsers': 25, 'sessions': 35, 'screenPageViews': 90}
-        ]
-    }
-    
-    # Create the insight generator (using OpenAI in this example)
-    generator = AnalyticsInsightGenerator(
-        llm_provider='openai',
-        api_key='your_api_key_here',  # Replace with your API key
-        model='gpt-4'
-    )
-    
-    # Custom prompt
-    custom_prompt = """
-You are the CMO of a company reviewing Google Analytics data. 
-Write a brief executive summary of the key findings from this data.
-Focus on business impact and strategic recommendations.
-
-Data Summary:
-{data_summary}
-
-Sample Data:
-{sample_data}
-
-Your executive summary should be concise, strategic, and actionable.
-"""
-    
-    # Generate custom analysis
-    analysis = generator.generate_custom_analysis(
-        data=sample_data,
-        custom_prompt=custom_prompt,
-        system_prompt="You are a strategic marketing executive with 20 years of experience."
-    )
-    
-    print("Custom Prompt Analysis:")
-    print(analysis)
-    
-    return analysis
-
-def main():
-    """Main function to demonstrate the LLM integration."""
-    # This is just an example - in a real application, you would integrate this
-    # with your Flask/FastAPI backend and database
-    
-    print("LLM Integration for Google Analytics Example")
-    print("-------------------------------------------")
-    
-    # Uncomment and modify these lines to run the examples
-    # analysis1 = example_openai_analysis()
-    # analysis2 = example_anthropic_analysis()
-    # analysis3 = example_custom_prompt()
-    
-    print("\nNote: This is a demonstration module. In a real application,")
-    print("you would need to provide valid API keys and integrate with GA data.")
-
-if __name__ == "__main__":
-    main()
