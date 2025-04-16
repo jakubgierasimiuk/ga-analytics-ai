@@ -20,7 +20,10 @@ from typing import Dict, List, Optional, Union, Any, Tuple
 import pandas as pd
 import openai
 from openai import OpenAI
-import anthropic
+try:
+    import anthropic
+except ImportError:
+    anthropic = None
 import requests
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
