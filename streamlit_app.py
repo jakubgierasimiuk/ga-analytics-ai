@@ -208,7 +208,7 @@ CACHE_DIR = BASE_DIR / "cache"
 REPORTS_DIR = BASE_DIR / "reports"
 PROMPTS_DIR = BASE_DIR / "prompts"
 CONFIG_DIR = BASE_DIR / "config"
-CREDENTIALS_DIR = BASE_DIR / "credentials"  # Directory for storing OAuth credentials
+CREDENTIALS_DIR = BASE_DIR / "credentials"  # Directory for storing credentials
 
 # Create directories if they don't exist
 for directory in [DATA_DIR, CACHE_DIR, REPORTS_DIR, PROMPTS_DIR, CONFIG_DIR, CREDENTIALS_DIR]:
@@ -300,31 +300,23 @@ def get_ga_account(account_id: str) -> Optional[Dict[str, Any]]:
             return account
     return None
 
-def convert_web_to_installed_client(web_client_json: dict) -> dict:
+def is_service_account_json(json_content: bytes) -> bool:
     """
-    Convert a web client JSON to an installed client JSON format.
+    Check if the JSON content is a service account key.
     
     Args:
-        web_client_json: Web client JSON with 'web' as root key
+        json_content: JSON content as bytes
         
     Returns:
-        Converted JSON with 'installed' as root key
+        True if it's a service account key, False otherwise
     """
-    if 'web' not in web_client_json:
-        return web_client_json  # Already in correct format or invalid
-    
-    web_data = web_client_json['web']
-    return {
-        'installed': {
-            'client_id': web_data.get('client_id', ''),
-            'project_id': web_data.get('project_id', ''),
-            'auth_uri': web_data.get('auth_uri', ''),
-            'token_uri': web_data.get('token_uri', ''),
-            'auth_provider_x509_cert_url': web_data.get('auth_provider_x509_cert_url', ''),
-            'client_secret': web_data.get('client_secret', ''),
-            'redirect_uris': web_data.get('redirect_uris', [])
-        }
-    }
+    try:
+        json_data = json.loads(json_content)
+        # Service account keys typically have these fields
+        required_fields = ['type', 'project_id', 'private_key_id', 'private_key', 'client_email']
+        return all(field in json_data for field in required_fields) and json_data.get('type') == 'service_account'
+    except Exception:
+        return False
 
 def add_ga_account(name: str, property_id: str, credentials_file) -> Dict[str, Any]:
     """Add a new GA account."""
@@ -340,16 +332,8 @@ def add_ga_account(name: str, property_id: str, credentials_file) -> Dict[str, A
     # Read the uploaded file and save it
     credentials_content = credentials_file.read()
     
-    # Check if it's a web client JSON and convert if needed
-    try:
-        credentials_json = json.loads(credentials_content)
-        if 'web' in credentials_json:
-            # Convert web client to installed client format
-            converted_json = convert_web_to_installed_client(credentials_json)
-            credentials_content = json.dumps(converted_json).encode('utf-8')
-            logger.info("Converted web client credentials to installed client format")
-    except Exception as e:
-        logger.error(f"Error processing credentials JSON: {str(e)}")
+    # Check if it's a service account JSON
+    is_service_account = is_service_account_json(credentials_content)
     
     # Save the credentials file
     with open(credentials_path, 'wb') as f:
@@ -361,6 +345,7 @@ def add_ga_account(name: str, property_id: str, credentials_file) -> Dict[str, A
         'name': name,
         'property_id': property_id,
         'credentials_path': str(credentials_path),
+        'is_service_account': is_service_account,
         'created_at': datetime.datetime.now().isoformat()
     }
     
@@ -771,7 +756,8 @@ def render_new_analysis():
                     pipeline = AnalysisPipeline(
                         ga_credentials_path=selected_account['credentials_path'],
                         llm_provider="openai",
-                        llm_api_key=api_keys['openai']['api_key']
+                        llm_api_key=api_keys['openai']['api_key'],
+                        use_service_account=selected_account.get('is_service_account', False)
                     )
                     
                     # Authenticate with Google Analytics
@@ -974,8 +960,11 @@ def render_settings():
         with st.form("add_ga_account_form"):
             account_name = st.text_input("Account Name")
             property_id = st.text_input("Property ID", help="Format: 123456789")
-            credentials_file = st.file_uploader("OAuth Credentials JSON", type=["json"], 
-                                               help="Upload your OAuth client ID JSON file. If you have a Web application client ID, it will be automatically converted to the required format.")
+            credentials_file = st.file_uploader(
+                "Service Account JSON Key", 
+                type=["json"], 
+                help="Upload your Google Analytics service account key JSON file."
+            )
             
             submitted = st.form_submit_button("Add Account")
             
@@ -1004,6 +993,7 @@ def render_settings():
                 st.write(f"ID: {account['id']}")
                 st.write(f"Created: {account['created_at'][:10]}")
                 st.write(f"Credentials Path: {account['credentials_path']}")
+                st.write(f"Authentication Type: {'Service Account' if account.get('is_service_account', False) else 'OAuth'}")
                 
                 if st.button("Delete Account", key=f"delete_account_{account['id']}"):
                     if delete_ga_account(account['id']):
@@ -1014,32 +1004,44 @@ def render_settings():
     else:
         st.info("No Google Analytics accounts configured. Add your first account using the form above.")
     
-    # OAuth Credentials Help
-    with st.expander("Help with OAuth Credentials"):
+    # Service Account Help
+    with st.expander("Help with Service Account Setup"):
         st.markdown("""
-        ## OAuth Credentials Help
+        ## Service Account Setup Help
         
-        This application requires OAuth credentials to access your Google Analytics data. You need to create OAuth credentials in the Google Cloud Console.
+        This application requires a service account to access your Google Analytics data. Service accounts are ideal for server-to-server applications like this one, as they don't require user interaction.
         
-        ### Steps to create OAuth credentials:
+        ### Steps to create a service account:
         
         1. Go to the [Google Cloud Console](https://console.cloud.google.com/)
         2. Create a new project or select an existing one
         3. Enable the Google Analytics Data API
-        4. Go to "Credentials" and click "Create Credentials"
-        5. Select "OAuth client ID"
-        6. Choose "Desktop application" as the application type
-        7. Name your OAuth client and click "Create"
-        8. Download the JSON file
-        9. Upload the downloaded JSON file in the form above
+        4. Go to "IAM & Admin" > "Service Accounts"
+        5. Click "Create Service Account"
+        6. Enter a name and description for the service account
+        7. Click "Create and Continue"
+        8. For the role, select "Viewer" (or a more specific role if needed)
+        9. Click "Continue" and then "Done"
+        10. Click on the service account you just created
+        11. Go to the "Keys" tab
+        12. Click "Add Key" > "Create new key"
+        13. Select "JSON" as the key type and click "Create"
+        14. The key file will be downloaded to your computer
+        15. Upload this key file in the form above
         
-        If you already have a Web application client ID, you can use it as well. The application will automatically convert it to the required format.
+        ### Grant access to your Google Analytics property:
+        
+        1. Go to your Google Analytics account
+        2. Navigate to "Admin" > "Account Access Management"
+        3. Click "+"
+        4. Add the service account email (it looks like: service-account-name@project-id.iam.gserviceaccount.com)
+        5. Assign "Viewer" role (or higher if needed)
         
         ### Common issues:
         
         - Make sure you've enabled the Google Analytics Data API in your Google Cloud project
-        - Ensure you have the correct permissions for the Google Analytics property you're trying to access
-        - If you're using a Web application client ID, make sure it includes the correct redirect URIs
+        - Ensure the service account has the correct permissions in Google Analytics
+        - Verify that the property ID is correct (it should be just the number, without "properties/")
         """)
 
 # Main app logic
