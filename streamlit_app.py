@@ -870,6 +870,7 @@ def render_new_analysis():
                 ),
                 insight_generator=AnalyticsInsightGenerator(
                     llm_provider=LLMFactory.create_provider(
+                        provider_name="openai",  # Fixed parameter name
                         api_key=api_keys['openai']['api_key']
                     )
                 )
