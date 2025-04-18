@@ -300,6 +300,32 @@ def get_ga_account(account_id: str) -> Optional[Dict[str, Any]]:
             return account
     return None
 
+def convert_web_to_installed_client(web_client_json: dict) -> dict:
+    """
+    Convert a web client JSON to an installed client JSON format.
+    
+    Args:
+        web_client_json: Web client JSON with 'web' as root key
+        
+    Returns:
+        Converted JSON with 'installed' as root key
+    """
+    if 'web' not in web_client_json:
+        return web_client_json  # Already in correct format or invalid
+    
+    web_data = web_client_json['web']
+    return {
+        'installed': {
+            'client_id': web_data.get('client_id', ''),
+            'project_id': web_data.get('project_id', ''),
+            'auth_uri': web_data.get('auth_uri', ''),
+            'token_uri': web_data.get('token_uri', ''),
+            'auth_provider_x509_cert_url': web_data.get('auth_provider_x509_cert_url', ''),
+            'client_secret': web_data.get('client_secret', ''),
+            'redirect_uris': web_data.get('redirect_uris', [])
+        }
+    }
+
 def add_ga_account(name: str, property_id: str, credentials_file) -> Dict[str, Any]:
     """Add a new GA account."""
     accounts = load_json_db(GA_ACCOUNTS_DB)
@@ -313,6 +339,19 @@ def add_ga_account(name: str, property_id: str, credentials_file) -> Dict[str, A
     
     # Read the uploaded file and save it
     credentials_content = credentials_file.read()
+    
+    # Check if it's a web client JSON and convert if needed
+    try:
+        credentials_json = json.loads(credentials_content)
+        if 'web' in credentials_json:
+            # Convert web client to installed client format
+            converted_json = convert_web_to_installed_client(credentials_json)
+            credentials_content = json.dumps(converted_json).encode('utf-8')
+            logger.info("Converted web client credentials to installed client format")
+    except Exception as e:
+        logger.error(f"Error processing credentials JSON: {str(e)}")
+    
+    # Save the credentials file
     with open(credentials_path, 'wb') as f:
         f.write(credentials_content)
     
@@ -935,7 +974,8 @@ def render_settings():
         with st.form("add_ga_account_form"):
             account_name = st.text_input("Account Name")
             property_id = st.text_input("Property ID", help="Format: 123456789")
-            credentials_file = st.file_uploader("OAuth Credentials JSON", type=["json"])
+            credentials_file = st.file_uploader("OAuth Credentials JSON", type=["json"], 
+                                               help="Upload your OAuth client ID JSON file. If you have a Web application client ID, it will be automatically converted to the required format.")
             
             submitted = st.form_submit_button("Add Account")
             
@@ -973,6 +1013,34 @@ def render_settings():
                         st.error("Failed to delete account.")
     else:
         st.info("No Google Analytics accounts configured. Add your first account using the form above.")
+    
+    # OAuth Credentials Help
+    with st.expander("Help with OAuth Credentials"):
+        st.markdown("""
+        ## OAuth Credentials Help
+        
+        This application requires OAuth credentials to access your Google Analytics data. You need to create OAuth credentials in the Google Cloud Console.
+        
+        ### Steps to create OAuth credentials:
+        
+        1. Go to the [Google Cloud Console](https://console.cloud.google.com/)
+        2. Create a new project or select an existing one
+        3. Enable the Google Analytics Data API
+        4. Go to "Credentials" and click "Create Credentials"
+        5. Select "OAuth client ID"
+        6. Choose "Desktop application" as the application type
+        7. Name your OAuth client and click "Create"
+        8. Download the JSON file
+        9. Upload the downloaded JSON file in the form above
+        
+        If you already have a Web application client ID, you can use it as well. The application will automatically convert it to the required format.
+        
+        ### Common issues:
+        
+        - Make sure you've enabled the Google Analytics Data API in your Google Cloud project
+        - Ensure you have the correct permissions for the Google Analytics property you're trying to access
+        - If you're using a Web application client ID, make sure it includes the correct redirect URIs
+        """)
 
 # Main app logic
 def main():
