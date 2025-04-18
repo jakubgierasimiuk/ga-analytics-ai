@@ -184,8 +184,7 @@ except ImportError as e:
     
     class AnalysisPipeline:
         def __init__(self, *args, **kwargs):
-            self.ga_connector = GoogleAnalyticsConnector()
-            self.insight_generator = AnalyticsInsightGenerator()
+            pass
         
         def authenticate_ga(self, *args, **kwargs):
             return False
@@ -863,17 +862,11 @@ def render_new_analysis():
             # Add date range to config
             analysis_config["date_range"] = date_range
             
-            # Create analysis pipeline
+            # Create analysis pipeline with correct parameters
             pipeline = AnalysisPipeline(
-                ga_connector=GoogleAnalyticsConnector(
-                    credentials_path=selected_account['credentials_path']
-                ),
-                insight_generator=AnalyticsInsightGenerator(
-                    llm_provider=LLMFactory.create_provider(
-                        provider_name="openai",  # Fixed parameter name
-                        api_key=api_keys['openai']['api_key']
-                    )
-                )
+                ga_credentials_path=selected_account['credentials_path'],
+                llm_provider="openai",
+                llm_api_key=api_keys['openai']['api_key']
             )
             
             # Run analysis
