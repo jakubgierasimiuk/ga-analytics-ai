@@ -538,7 +538,34 @@ def save_uploaded_file(uploaded_file, directory: Path, filename: Optional[str] =
 def navigate_to(page: str):
     """Navigate to a different page in the app."""
     st.session_state.page = page
-    # Removed st.rerun() call to prevent infinite loop
+    # No st.rerun() call to prevent infinite loop
+
+# Sidebar navigation function
+def render_sidebar():
+    """Render the sidebar navigation."""
+    with st.sidebar:
+        st.title("Navigation")
+        
+        if st.button("Dashboard", key="nav_dashboard"):
+            navigate_to('dashboard')
+        
+        if st.button("New Analysis", key="nav_new_analysis"):
+            navigate_to('new_analysis')
+        
+        if st.button("Report History", key="nav_report_history"):
+            navigate_to('report_history')
+        
+        if st.button("Prompt Library", key="nav_prompt_library"):
+            navigate_to('prompt_library')
+        
+        if st.button("Settings", key="nav_settings"):
+            navigate_to('settings')
+        
+        st.markdown("---")
+        
+        if st.button("Logout", key="nav_logout"):
+            st.session_state.user = None
+            navigate_to('login')
 
 # Main app
 def main():
@@ -598,7 +625,7 @@ def render_login():
                 
                 # Navigate to dashboard
                 navigate_to('dashboard')
-                # Removed st.rerun() call to prevent infinite loop
+                st.rerun()  # Keep this rerun as it's needed for initial login
             else:
                 st.error("Please enter both email and name")
 
@@ -606,42 +633,8 @@ def render_dashboard():
     """Render the dashboard page."""
     st.title(f"Welcome, {st.session_state.user['name']}!")
     
-    # Sidebar navigation
-    with st.sidebar:
-        st.title("Navigation")
-        
-        if st.button("Dashboard", key="nav_dashboard"):
-            navigate_to('dashboard')
-            # Removed st.rerun() call to prevent infinite loop
-            return
-        
-        if st.button("New Analysis", key="nav_new_analysis"):
-            navigate_to('new_analysis')
-            # Removed st.rerun() call to prevent infinite loop
-            return
-        
-        if st.button("Report History", key="nav_report_history"):
-            navigate_to('report_history')
-            # Removed st.rerun() call to prevent infinite loop
-            return
-        
-        if st.button("Prompt Library", key="nav_prompt_library"):
-            navigate_to('prompt_library')
-            # Removed st.rerun() call to prevent infinite loop
-            return
-        
-        if st.button("Settings", key="nav_settings"):
-            navigate_to('settings')
-            # Removed st.rerun() call to prevent infinite loop
-            return
-        
-        st.markdown("---")
-        
-        if st.button("Logout", key="nav_logout"):
-            st.session_state.user = None
-            navigate_to('login')
-            # Removed st.rerun() call to prevent infinite loop
-            return
+    # Render sidebar navigation
+    render_sidebar()
     
     # Dashboard content
     st.header("Dashboard")
@@ -654,8 +647,7 @@ def render_dashboard():
         
         if st.button("Connect Google Analytics"):
             navigate_to('settings')
-            # Removed st.rerun() call to prevent infinite loop
-            return
+            st.rerun()  # Keep this rerun for button actions
         
         return
     
@@ -667,8 +659,7 @@ def render_dashboard():
         
         if st.button("Add API Keys"):
             navigate_to('settings')
-            # Removed st.rerun() call to prevent infinite loop
-            return
+            st.rerun()  # Keep this rerun for button actions
         
         return
     
@@ -682,8 +673,7 @@ def render_dashboard():
         
         if st.button("Create New Analysis"):
             navigate_to('new_analysis')
-            # Removed st.rerun() call to prevent infinite loop
-            return
+            st.rerun()  # Keep this rerun for button actions
     else:
         # Sort reports by creation date (newest first)
         reports.sort(key=lambda x: x['created_at'], reverse=True)
@@ -700,13 +690,11 @@ def render_dashboard():
                 if st.button("View", key=f"view_{report['id']}"):
                     st.session_state.selected_report = report
                     navigate_to('view_report')
-                    # Removed st.rerun() call to prevent infinite loop
-                    return
+                    st.rerun()  # Keep this rerun for button actions
         
         if st.button("View All Reports"):
             navigate_to('report_history')
-            # Removed st.rerun() call to prevent infinite loop
-            return
+            st.rerun()  # Keep this rerun for button actions
     
     # Quick actions
     st.subheader("Quick Actions")
@@ -716,24 +704,24 @@ def render_dashboard():
     with col1:
         if st.button("New Analysis"):
             navigate_to('new_analysis')
-            # Removed st.rerun() call to prevent infinite loop
-            return
+            st.rerun()  # Keep this rerun for button actions
     
     with col2:
         if st.button("Manage Prompts"):
             navigate_to('prompt_library')
-            # Removed st.rerun() call to prevent infinite loop
-            return
+            st.rerun()  # Keep this rerun for button actions
     
     with col3:
         if st.button("Account Settings"):
             navigate_to('settings')
-            # Removed st.rerun() call to prevent infinite loop
-            return
+            st.rerun()  # Keep this rerun for button actions
 
 def render_new_analysis():
     """Render the new analysis page."""
     st.title("New Analysis")
+    
+    # Render sidebar navigation
+    render_sidebar()
     
     # Check if user has GA accounts
     ga_accounts = get_ga_accounts(st.session_state.user['id'])
@@ -743,8 +731,7 @@ def render_new_analysis():
         
         if st.button("Connect Google Analytics"):
             navigate_to('settings')
-            # Removed st.rerun() call to prevent infinite loop
-            return
+            st.rerun()  # Keep this rerun for button actions
         
         return
     
@@ -756,8 +743,7 @@ def render_new_analysis():
         
         if st.button("Add API Keys"):
             navigate_to('settings')
-            # Removed st.rerun() call to prevent infinite loop
-            return
+            st.rerun()  # Keep this rerun for button actions
         
         return
     
@@ -884,7 +870,6 @@ def render_new_analysis():
                 ),
                 insight_generator=AnalyticsInsightGenerator(
                     llm_provider=LLMFactory.create_provider(
-                        provider="openai",
                         api_key=api_keys['openai']['api_key']
                     )
                 )
@@ -945,8 +930,7 @@ def render_new_analysis():
             # Option to view in report history
             if st.button("Go to Report History"):
                 navigate_to('report_history')
-                # Removed st.rerun() call to prevent infinite loop
-                return
+                st.rerun()  # Keep this rerun for button actions
             
         except Exception as e:
             st.error(f"Error running analysis: {str(e)}")
@@ -956,6 +940,9 @@ def render_report_history():
     """Render the report history page."""
     st.title("Report History")
     
+    # Render sidebar navigation
+    render_sidebar()
+    
     # Get all reports for the user
     reports = get_reports(st.session_state.user['id'])
     
@@ -964,8 +951,7 @@ def render_report_history():
         
         if st.button("Create New Analysis"):
             navigate_to('new_analysis')
-            # Removed st.rerun() call to prevent infinite loop
-            return
+            st.rerun()  # Keep this rerun for button actions
         
         return
     
@@ -1014,27 +1000,27 @@ def render_report_history():
             if st.button("View", key=f"view_{report['id']}"):
                 st.session_state.selected_report = report
                 navigate_to('view_report')
-                # Removed st.rerun() call to prevent infinite loop
-                return
+                st.rerun()  # Keep this rerun for button actions
             
             # Toggle favorite status
             favorite_label = "Remove Favorite" if report.get('is_favorite') else "Add Favorite"
             if st.button(favorite_label, key=f"fav_{report['id']}"):
                 update_report(report['id'], {'is_favorite': not report.get('is_favorite', False)})
-                # Use a single rerun at the end of the function instead
-                return
+                st.rerun()  # Keep this rerun for button actions
         
         st.markdown("---")
 
 def render_view_report():
     """Render the view report page."""
+    # Render sidebar navigation
+    render_sidebar()
+    
     if 'selected_report' not in st.session_state:
         st.error("No report selected")
         
         if st.button("Back to Report History"):
             navigate_to('report_history')
-            # Removed st.rerun() call to prevent infinite loop
-            return
+            st.rerun()  # Keep this rerun for button actions
         
         return
     
@@ -1069,26 +1055,26 @@ def render_view_report():
         if st.button(favorite_label):
             update_report(report['id'], {'is_favorite': not report.get('is_favorite', False)})
             st.session_state.selected_report = update_report(report['id'], {})  # Refresh the report
-            # Removed st.rerun() call to prevent infinite loop
-            return
+            st.rerun()  # Keep this rerun for button actions
     
     with col2:
         # Run similar analysis
         if st.button("Run Similar Analysis"):
             navigate_to('new_analysis')
-            # Removed st.rerun() call to prevent infinite loop
-            return
+            st.rerun()  # Keep this rerun for button actions
     
     with col3:
         # Back to report history
         if st.button("Back to Report History"):
             navigate_to('report_history')
-            # Removed st.rerun() call to prevent infinite loop
-            return
+            st.rerun()  # Keep this rerun for button actions
 
 def render_prompt_library():
     """Render the prompt library page."""
     st.title("Prompt Library")
+    
+    # Render sidebar navigation
+    render_sidebar()
     
     # Get all prompts for the user
     prompts = get_prompts(st.session_state.user['id'])
@@ -1153,16 +1139,14 @@ def render_prompt_library():
                         favorite_label = "Remove from Favorites" if prompt.get('is_favorite') else "Add to Favorites"
                         if not prompt.get('is_system') and st.button(favorite_label, key=f"fav_{prompt['id']}"):
                             update_prompt(prompt['id'], {'is_favorite': not prompt.get('is_favorite', False)})
-                            # Removed st.rerun() call to prevent infinite loop
-                            return
+                            st.rerun()  # Keep this rerun for button actions
                     
                     with col2:
                         # Edit prompt (only for user prompts)
                         if not prompt.get('is_system') and st.button("Edit", key=f"edit_{prompt['id']}"):
                             st.session_state.selected_prompt = prompt
                             st.session_state.editing_prompt = True
-                            # Removed st.rerun() call to prevent infinite loop
-                            return
+                            st.rerun()  # Keep this rerun for button actions
     
     with tab2:
         # Check if we're editing an existing prompt
@@ -1209,8 +1193,7 @@ def render_prompt_library():
             with col3:
                 if st.button("Remove", key=f"remove_{param_name}"):
                     del st.session_state.prompt_params[param_name]
-                    # Removed st.rerun() call to prevent infinite loop
-                    return
+                    st.rerun()  # Keep this rerun for button actions
         
         # Add new parameter
         st.subheader("Add Parameter")
@@ -1225,8 +1208,7 @@ def render_prompt_library():
         with col3:
             if st.button("Add") and new_param_name:
                 st.session_state.prompt_params[new_param_name] = new_param_value
-                # Removed st.rerun() call to prevent infinite loop
-                return
+                st.rerun()  # Keep this rerun for button actions
         
         # Save button
         if editing:
@@ -1249,8 +1231,7 @@ def render_prompt_library():
                     st.session_state.prompt_params = {}
                     
                     st.success("Prompt updated successfully!")
-                    # Removed st.rerun() call to prevent infinite loop
-                    return
+                    st.rerun()  # Keep this rerun for button actions
                 else:
                     st.error("Title and template are required")
             
@@ -1262,8 +1243,7 @@ def render_prompt_library():
                 # Clear parameters
                 st.session_state.prompt_params = {}
                 
-                # Removed st.rerun() call to prevent infinite loop
-                return
+                st.rerun()  # Keep this rerun for button actions
         else:
             if st.button("Create Prompt"):
                 if title and prompt_template:
@@ -1281,14 +1261,16 @@ def render_prompt_library():
                     st.session_state.prompt_params = {}
                     
                     st.success("Prompt created successfully!")
-                    # Removed st.rerun() call to prevent infinite loop
-                    return
+                    st.rerun()  # Keep this rerun for button actions
                 else:
                     st.error("Title and template are required")
 
 def render_settings():
     """Render the settings page."""
     st.title("Settings")
+    
+    # Render sidebar navigation
+    render_sidebar()
     
     # Tabs for different settings
     tab1, tab2, tab3 = st.tabs(["Google Analytics", "API Keys", "User Settings"])
@@ -1315,8 +1297,7 @@ def render_settings():
                     if st.button("Delete", key=f"delete_{account['id']}"):
                         if delete_ga_account(account['id']):
                             st.success(f"Account {account['account_name']} deleted successfully!")
-                            # Removed st.rerun() call to prevent infinite loop
-                            return
+                            st.rerun()  # Keep this rerun for button actions
                         else:
                             st.error("Failed to delete account")
                 
@@ -1361,8 +1342,7 @@ def render_settings():
                     )
                     
                     st.success("Account added successfully!")
-                    # Removed st.rerun() call to prevent infinite loop
-                    return
+                    st.rerun()  # Keep this rerun for button actions
                 except Exception as e:
                     st.error(f"Error adding account: {str(e)}")
                     logger.error(f"Error adding GA account: {str(e)}", exc_info=True)
@@ -1411,8 +1391,7 @@ def render_settings():
                 )
                 
                 st.success(f"{service.capitalize()} API key saved successfully!")
-                # Removed st.rerun() call to prevent infinite loop
-                return
+                st.rerun()  # Keep this rerun for button actions
             else:
                 st.error("Please select a service and enter an API key")
     
@@ -1451,8 +1430,7 @@ def render_settings():
                 st.session_state.user['name'] = new_name
                 
                 st.success("User information updated successfully!")
-                # Removed st.rerun() call to prevent infinite loop
-                return
+                st.rerun()  # Keep this rerun for button actions
             else:
                 st.error("Name cannot be empty")
 
