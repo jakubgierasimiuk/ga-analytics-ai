@@ -869,6 +869,12 @@ def render_new_analysis():
                 llm_api_key=api_keys['openai']['api_key']
             )
             
+            # Authenticate with Google Analytics before running analysis
+            auth_success = pipeline.authenticate_ga()
+            if not auth_success:
+                st.error("Failed to authenticate with Google Analytics. Please check your credentials.")
+                return
+            
             # Run analysis
             results = pipeline.run_complete_analysis(
                 property_id=selected_account['property_id'],
