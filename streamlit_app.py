@@ -728,27 +728,27 @@ def render_new_analysis():
                     
                     # Set metrics and dimensions based on analysis type
                     if analysis_type == "General Overview":
-                        analysis_config['metrics'] = ["sessions", "users", "pageviews", "bounceRate", "avgSessionDuration"]
+                        analysis_config['metrics'] = ["sessions", "totalUsers", "screenPageViews", "bounceRate", "averageSessionDuration"]
                         analysis_config['dimensions'] = ["date", "deviceCategory"]
                         analysis_config['analysis_type'] = "general"
                     elif analysis_type == "Traffic Analysis":
-                        analysis_config['metrics'] = ["sessions", "users", "newUsers", "pageviews", "sessionDuration"]
-                        analysis_config['dimensions'] = ["source", "medium", "date"]
+                        analysis_config['metrics'] = ["sessions", "totalUsers", "newUsers", "screenPageViews", "averageSessionDuration"]
+                        analysis_config['dimensions'] = ["sessionSource", "sessionMedium", "date"]
                         analysis_config['analysis_type'] = "traffic"
                     elif analysis_type == "Conversion Analysis":
-                        analysis_config['metrics'] = ["goalCompletionsAll", "goalConversionRateAll", "goalValueAll"]
-                        analysis_config['dimensions'] = ["date", "deviceCategory", "source"]
+                        analysis_config['metrics'] = ["conversions", "conversionRate", "eventCount"]
+                        analysis_config['dimensions'] = ["date", "deviceCategory", "sessionSource"]
                         analysis_config['analysis_type'] = "conversion"
                     elif analysis_type == "User Behavior":
-                        analysis_config['metrics'] = ["pageviews", "avgTimeOnPage", "bounceRate", "exitRate"]
+                        analysis_config['metrics'] = ["screenPageViews", "averageSessionDuration", "bounceRate", "eventCount"]
                         analysis_config['dimensions'] = ["pagePath", "deviceCategory"]
                         analysis_config['analysis_type'] = "user_behavior"
                     elif analysis_type == "Anomaly Detection":
-                        analysis_config['metrics'] = ["sessions", "users", "pageviews", "bounceRate"]
+                        analysis_config['metrics'] = ["sessions", "totalUsers", "screenPageViews", "bounceRate"]
                         analysis_config['dimensions'] = ["date"]
                         analysis_config['analysis_type'] = "anomaly"
                     elif analysis_type == "Comparative Analysis":
-                        analysis_config['metrics'] = ["sessions", "users", "pageviews", "bounceRate"]
+                        analysis_config['metrics'] = ["sessions", "totalUsers", "screenPageViews", "bounceRate"]
                         analysis_config['dimensions'] = ["date", "deviceCategory"]
                         analysis_config['analysis_type'] = "comparative"
                     
@@ -1042,6 +1042,45 @@ def render_settings():
         - Make sure you've enabled the Google Analytics Data API in your Google Cloud project
         - Ensure the service account has the correct permissions in Google Analytics
         - Verify that the property ID is correct (it should be just the number, without "properties/")
+        """)
+    
+    # GA4 Metrics and Dimensions Help
+    with st.expander("Help with Google Analytics 4 Metrics and Dimensions"):
+        st.markdown("""
+        ## Google Analytics 4 Metrics and Dimensions
+        
+        Google Analytics 4 (GA4) uses different metrics and dimensions than Universal Analytics. Here are some common GA4 metrics and dimensions that you can use in this application:
+        
+        ### Common GA4 Metrics:
+        
+        - **sessions**: Number of sessions
+        - **totalUsers**: Total number of users
+        - **newUsers**: Number of new users
+        - **screenPageViews**: Number of page views
+        - **averageSessionDuration**: Average session duration
+        - **bounceRate**: Bounce rate
+        - **eventCount**: Number of events
+        - **conversions**: Number of conversions
+        - **conversionRate**: Conversion rate
+        - **engagementRate**: Engagement rate
+        - **activeUsers**: Number of active users
+        - **userEngagementDuration**: User engagement duration
+        
+        ### Common GA4 Dimensions:
+        
+        - **date**: Date
+        - **deviceCategory**: Device category (mobile, tablet, desktop)
+        - **sessionSource**: Source of the session
+        - **sessionMedium**: Medium of the session
+        - **pagePath**: Page path
+        - **country**: Country
+        - **city**: City
+        - **browser**: Browser
+        - **operatingSystem**: Operating system
+        - **language**: Language
+        - **screenResolution**: Screen resolution
+        
+        For a complete list of GA4 metrics and dimensions, see the [Google Analytics Data API documentation](https://developers.google.com/analytics/devguides/reporting/data/v1/api-schema).
         """)
 
 # Main app logic
