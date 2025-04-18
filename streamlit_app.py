@@ -34,23 +34,18 @@ except ImportError as e:
     class GoogleAnalyticsConnector:
         def __init__(self, *args, **kwargs):
             pass
-        
         def authenticate(self, *args, **kwargs):
             return False
-        
         def get_data(self, *args, **kwargs):
             return pd.DataFrame()
-        
         def import_from_file(self, *args, **kwargs):
             return pd.DataFrame()
-    
+
     class GADataProcessor:
         def __init__(self, *args, **kwargs):
             pass
-        
         def get_summary_statistics(self, *args, **kwargs):
             return {}
-        
         def prepare_data_for_llm(self, *args, **kwargs):
             return {}
 
@@ -62,56 +57,43 @@ except ImportError as e:
     class PromptTemplate:
         def __init__(self, *args, **kwargs):
             pass
-        
         def render(self, *args, **kwargs):
             return ""
-    
+
     class AnalyticsPromptLibrary:
         def get_general_analysis_prompt(self, *args, **kwargs):
             return PromptTemplate("", {})
-        
         def get_traffic_analysis_prompt(self, *args, **kwargs):
             return PromptTemplate("", {})
-        
         def get_conversion_analysis_prompt(self, *args, **kwargs):
             return PromptTemplate("", {})
-        
         def get_user_behavior_analysis_prompt(self, *args, **kwargs):
             return PromptTemplate("", {})
-        
         def get_anomaly_detection_prompt(self, *args, **kwargs):
             return PromptTemplate("", {})
-        
         def get_comparative_analysis_prompt(self, *args, **kwargs):
             return PromptTemplate("", {})
-    
+
     class LLMFactory:
         @staticmethod
         def create_provider(*args, **kwargs):
             return None
-    
+
     class AnalyticsInsightGenerator:
         def __init__(self, *args, **kwargs):
             pass
-        
         def generate_insights(self, *args, **kwargs):
             return "Mock insights (LLM integration not available)"
-        
         def generate_general_analysis(self, *args, **kwargs):
             return "Mock general analysis (LLM integration not available)"
-        
         def generate_traffic_analysis(self, *args, **kwargs):
             return "Mock traffic analysis (LLM integration not available)"
-        
         def generate_conversion_analysis(self, *args, **kwargs):
             return "Mock conversion analysis (LLM integration not available)"
-        
         def generate_user_behavior_analysis(self, *args, **kwargs):
             return "Mock user behavior analysis (LLM integration not available)"
-        
         def generate_anomaly_analysis(self, *args, **kwargs):
             return "Mock anomaly analysis (LLM integration not available)"
-        
         def generate_comparative_analysis(self, *args, **kwargs):
             return "Mock comparative analysis (LLM integration not available)"
 
@@ -168,7 +150,7 @@ except ImportError as e:
                 "dimensions": ["date", "deviceCategory"],
                 "analysis_type": "comparative"
             }
-    
+
     class ReportGenerator:
         def __init__(self, *args, **kwargs):
             pass
@@ -181,7 +163,7 @@ except ImportError as e:
         
         def save_report(self, *args, **kwargs):
             return "/tmp/mock_report.md"
-    
+
     class AnalysisPipeline:
         def __init__(self, *args, **kwargs):
             pass
@@ -226,7 +208,7 @@ CACHE_DIR = BASE_DIR / "cache"
 REPORTS_DIR = BASE_DIR / "reports"
 PROMPTS_DIR = BASE_DIR / "prompts"
 CONFIG_DIR = BASE_DIR / "config"
-CREDENTIALS_DIR = BASE_DIR / "credentials"  # New directory for storing OAuth credentials
+CREDENTIALS_DIR = BASE_DIR / "credentials"  # Directory for storing OAuth credentials
 
 # Create directories if they don't exist
 for directory in [DATA_DIR, CACHE_DIR, REPORTS_DIR, PROMPTS_DIR, CONFIG_DIR, CREDENTIALS_DIR]:
@@ -298,8 +280,7 @@ def add_user(email: str, name: str) -> Dict[str, Any]:
         'id': str(uuid.uuid4()),
         'email': email,
         'name': name,
-        'created_at': datetime.datetime.now().isoformat(),
-        'last_login': datetime.datetime.now().isoformat()
+        'created_at': datetime.datetime.now().isoformat()
     }
     
     users.append(new_user)
@@ -307,41 +288,41 @@ def add_user(email: str, name: str) -> Dict[str, Any]:
     
     return new_user
 
-def update_user_login(user_id: str):
-    """Update user's last login time."""
-    users = load_json_db(USERS_DB)
-    
-    for user in users:
-        if user['id'] == user_id:
-            user['last_login'] = datetime.datetime.now().isoformat()
-            break
-    
-    save_json_db(USERS_DB, users)
+def get_ga_accounts() -> List[Dict[str, Any]]:
+    """Get all GA accounts."""
+    return load_json_db(GA_ACCOUNTS_DB)
 
-def get_ga_accounts(user_id: str) -> List[Dict[str, Any]]:
-    """Get Google Analytics accounts for a user."""
+def get_ga_account(account_id: str) -> Optional[Dict[str, Any]]:
+    """Get a GA account by ID."""
     accounts = load_json_db(GA_ACCOUNTS_DB)
-    return [account for account in accounts if account['user_id'] == user_id]
-
-def add_ga_account(user_id: str, account_name: str, property_id: str, credentials_path: str) -> Dict[str, Any]:
-    """Add a Google Analytics account for a user."""
-    accounts = load_json_db(GA_ACCOUNTS_DB)
-    
-    # Check if account already exists
     for account in accounts:
-        if account['user_id'] == user_id and account['property_id'] == property_id:
+        if account['id'] == account_id:
             return account
+    return None
+
+def add_ga_account(name: str, property_id: str, credentials_file) -> Dict[str, Any]:
+    """Add a new GA account."""
+    accounts = load_json_db(GA_ACCOUNTS_DB)
+    
+    # Generate a unique ID for the account
+    account_id = str(uuid.uuid4())
+    
+    # Save the credentials file to the credentials directory
+    credentials_filename = f"ga_credentials_{account_id}.json"
+    credentials_path = CREDENTIALS_DIR / credentials_filename
+    
+    # Read the uploaded file and save it
+    credentials_content = credentials_file.read()
+    with open(credentials_path, 'wb') as f:
+        f.write(credentials_content)
     
     # Create new account
     new_account = {
-        'id': str(uuid.uuid4()),
-        'user_id': user_id,
-        'account_name': account_name,
+        'id': account_id,
+        'name': name,
         'property_id': property_id,
-        'credentials_path': credentials_path,
-        'created_at': datetime.datetime.now().isoformat(),
-        'last_used': datetime.datetime.now().isoformat(),
-        'is_active': True
+        'credentials_path': str(credentials_path),
+        'created_at': datetime.datetime.now().isoformat()
     }
     
     accounts.append(new_account)
@@ -350,134 +331,89 @@ def add_ga_account(user_id: str, account_name: str, property_id: str, credential
     return new_account
 
 def delete_ga_account(account_id: str) -> bool:
-    """Delete a Google Analytics account."""
+    """Delete a GA account by ID."""
     accounts = load_json_db(GA_ACCOUNTS_DB)
     
     # Find the account to delete
     for i, account in enumerate(accounts):
         if account['id'] == account_id:
-            # Delete the credentials file if it exists
-            if os.path.exists(account['credentials_path']):
-                try:
-                    os.remove(account['credentials_path'])
-                except Exception as e:
-                    logger.error(f"Error deleting credentials file: {e}")
+            # Delete the credentials file
+            credentials_path = Path(account['credentials_path'])
+            if credentials_path.exists():
+                credentials_path.unlink()
             
             # Remove the account from the list
-            del accounts[i]
+            accounts.pop(i)
             save_json_db(GA_ACCOUNTS_DB, accounts)
             return True
     
     return False
 
-def get_api_keys(user_id: str) -> Dict[str, Dict[str, Any]]:
-    """Get API keys for a user."""
-    keys = load_json_db(API_KEYS_DB)
-    user_keys = {}
+def get_api_keys() -> Dict[str, Dict[str, str]]:
+    """Get all API keys."""
+    api_keys = load_json_db(API_KEYS_DB)
     
-    for key in keys:
-        if key['user_id'] == user_id:
-            user_keys[key['service']] = key
+    # Convert to dictionary format
+    result = {}
+    for key in api_keys:
+        provider = key.get('provider', '')
+        if provider:
+            result[provider] = {
+                'api_key': key.get('api_key', ''),
+                'updated_at': key.get('updated_at', '')
+            }
     
-    return user_keys
+    return result
 
-def add_api_key(user_id: str, service: str, api_key: str) -> Dict[str, Any]:
-    """Add an API key for a user."""
-    keys = load_json_db(API_KEYS_DB)
+def update_api_key(provider: str, api_key: str) -> Dict[str, Any]:
+    """Update an API key."""
+    api_keys = load_json_db(API_KEYS_DB)
     
     # Check if key already exists
-    for key in keys:
-        if key['user_id'] == user_id and key['service'] == service:
-            # Update existing key
-            key['api_key'] = api_key  # In a real app, this would be encrypted
+    for key in api_keys:
+        if key.get('provider') == provider:
+            key['api_key'] = api_key
             key['updated_at'] = datetime.datetime.now().isoformat()
-            save_json_db(API_KEYS_DB, keys)
+            save_json_db(API_KEYS_DB, api_keys)
             return key
     
     # Create new key
     new_key = {
-        'id': str(uuid.uuid4()),
-        'user_id': user_id,
-        'service': service,
-        'api_key': api_key,  # In a real app, this would be encrypted
+        'provider': provider,
+        'api_key': api_key,
         'created_at': datetime.datetime.now().isoformat(),
-        'updated_at': datetime.datetime.now().isoformat(),
-        'is_active': True
+        'updated_at': datetime.datetime.now().isoformat()
     }
     
-    keys.append(new_key)
-    save_json_db(API_KEYS_DB, keys)
+    api_keys.append(new_key)
+    save_json_db(API_KEYS_DB, api_keys)
     
     return new_key
 
-def get_reports(user_id: str) -> List[Dict[str, Any]]:
-    """Get reports for a user."""
-    reports = load_json_db(REPORTS_DB)
-    return [report for report in reports if report['user_id'] == user_id]
+def get_prompts() -> List[Dict[str, Any]]:
+    """Get all prompt templates."""
+    return load_json_db(PROMPTS_DB)
 
-def add_report(user_id: str, title: str, description: str, analysis_type: str, 
-               report_content: str, metadata: Dict[str, Any], 
-               file_path: Optional[str] = None) -> Dict[str, Any]:
-    """Add a report for a user."""
-    reports = load_json_db(REPORTS_DB)
-    
-    # Create new report
-    new_report = {
-        'id': str(uuid.uuid4()),
-        'user_id': user_id,
-        'title': title,
-        'description': description,
-        'analysis_type': analysis_type,
-        'created_at': datetime.datetime.now().isoformat(),
-        'file_path': file_path,
-        'metadata': metadata,
-        'is_favorite': False,
-        'tags': []
-    }
-    
-    reports.append(new_report)
-    save_json_db(REPORTS_DB, reports)
-    
-    return new_report
-
-def update_report(report_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Update a report."""
-    reports = load_json_db(REPORTS_DB)
-    
-    for report in reports:
-        if report['id'] == report_id:
-            for key, value in updates.items():
-                report[key] = value
-            save_json_db(REPORTS_DB, reports)
-            return report
-    
+def get_prompt(prompt_id: str) -> Optional[Dict[str, Any]]:
+    """Get a prompt template by ID."""
+    prompts = load_json_db(PROMPTS_DB)
+    for prompt in prompts:
+        if prompt['id'] == prompt_id:
+            return prompt
     return None
 
-def get_prompts(user_id: str) -> List[Dict[str, Any]]:
-    """Get prompts for a user."""
-    prompts = load_json_db(PROMPTS_DB)
-    return [prompt for prompt in prompts if prompt['user_id'] == user_id or prompt.get('is_system', False)]
-
-def add_prompt(user_id: str, title: str, description: str, prompt_template: str, 
-               parameters: Dict[str, Any], category: str) -> Dict[str, Any]:
-    """Add a prompt for a user."""
+def add_prompt(name: str, description: str, prompt_template: str) -> Dict[str, Any]:
+    """Add a new prompt template."""
     prompts = load_json_db(PROMPTS_DB)
     
     # Create new prompt
     new_prompt = {
         'id': str(uuid.uuid4()),
-        'user_id': user_id,
-        'title': title,
+        'name': name,
         'description': description,
         'prompt_template': prompt_template,
-        'parameters': parameters,
-        'category': category,
         'created_at': datetime.datetime.now().isoformat(),
-        'updated_at': datetime.datetime.now().isoformat(),
-        'usage_count': 0,
-        'is_favorite': False,
-        'is_system': False,
-        'tags': []
+        'updated_at': datetime.datetime.now().isoformat()
     }
     
     prompts.append(new_prompt)
@@ -485,61 +421,84 @@ def add_prompt(user_id: str, title: str, description: str, prompt_template: str,
     
     return new_prompt
 
-def update_prompt(prompt_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Update a prompt."""
+def update_prompt(prompt_id: str, name: str, description: str, prompt_template: str) -> Optional[Dict[str, Any]]:
+    """Update a prompt template."""
     prompts = load_json_db(PROMPTS_DB)
     
     for prompt in prompts:
         if prompt['id'] == prompt_id:
-            for key, value in updates.items():
-                prompt[key] = value
+            prompt['name'] = name
+            prompt['description'] = description
+            prompt['prompt_template'] = prompt_template
             prompt['updated_at'] = datetime.datetime.now().isoformat()
+            
             save_json_db(PROMPTS_DB, prompts)
             return prompt
     
     return None
 
-def increment_prompt_usage(prompt_id: str) -> Optional[Dict[str, Any]]:
-    """Increment the usage count for a prompt."""
+def delete_prompt(prompt_id: str) -> bool:
+    """Delete a prompt template."""
     prompts = load_json_db(PROMPTS_DB)
     
-    for prompt in prompts:
+    for i, prompt in enumerate(prompts):
         if prompt['id'] == prompt_id:
-            prompt['usage_count'] = prompt.get('usage_count', 0) + 1
+            prompts.pop(i)
             save_json_db(PROMPTS_DB, prompts)
-            return prompt
+            return True
     
+    return False
+
+def get_reports() -> List[Dict[str, Any]]:
+    """Get all reports."""
+    return load_json_db(REPORTS_DB)
+
+def get_report(report_id: str) -> Optional[Dict[str, Any]]:
+    """Get a report by ID."""
+    reports = load_json_db(REPORTS_DB)
+    for report in reports:
+        if report['id'] == report_id:
+            return report
     return None
 
-# Helper functions
-def get_file_download_link(file_path: str, link_text: str) -> str:
-    """Generate a download link for a file."""
-    with open(file_path, 'r') as f:
-        data = f.read()
+def add_report(title: str, description: str, report_data: Dict[str, Any], user_id: str) -> Dict[str, Any]:
+    """Add a new report."""
+    reports = load_json_db(REPORTS_DB)
     
-    b64 = base64.b64encode(data.encode()).decode()
-    filename = os.path.basename(file_path)
+    # Create new report
+    new_report = {
+        'id': str(uuid.uuid4()),
+        'title': title,
+        'description': description,
+        'user_id': user_id,
+        'created_at': datetime.datetime.now().isoformat(),
+        'updated_at': datetime.datetime.now().isoformat(),
+        'data': report_data
+    }
     
-    return f'<a href="data:file/txt;base64,{b64}" download="{filename}">{link_text}</a>'
+    reports.append(new_report)
+    save_json_db(REPORTS_DB, reports)
+    
+    return new_report
 
-def save_uploaded_file(uploaded_file, directory: Path, filename: Optional[str] = None) -> str:
-    """Save an uploaded file to the specified directory."""
-    if not filename:
-        filename = uploaded_file.name
+def delete_report(report_id: str) -> bool:
+    """Delete a report."""
+    reports = load_json_db(REPORTS_DB)
     
-    file_path = directory / filename
+    for i, report in enumerate(reports):
+        if report['id'] == report_id:
+            reports.pop(i)
+            save_json_db(REPORTS_DB, reports)
+            return True
     
-    with open(file_path, 'wb') as f:
-        f.write(uploaded_file.getbuffer())
-    
-    return str(file_path)
+    return False
 
+# Navigation functions
 def navigate_to(page: str):
     """Navigate to a different page in the app."""
     st.session_state.page = page
     # No st.rerun() call to prevent infinite loop
 
-# Sidebar navigation function
 def render_sidebar():
     """Render the sidebar navigation."""
     with st.sidebar:
@@ -547,63 +506,35 @@ def render_sidebar():
         
         if st.button("Dashboard", key="nav_dashboard"):
             navigate_to('dashboard')
+            st.rerun()
         
         if st.button("New Analysis", key="nav_new_analysis"):
             navigate_to('new_analysis')
+            st.rerun()
         
         if st.button("Report History", key="nav_report_history"):
             navigate_to('report_history')
+            st.rerun()
         
         if st.button("Prompt Library", key="nav_prompt_library"):
             navigate_to('prompt_library')
+            st.rerun()
         
         if st.button("Settings", key="nav_settings"):
             navigate_to('settings')
+            st.rerun()
         
         st.markdown("---")
         
         if st.button("Logout", key="nav_logout"):
             st.session_state.user = None
             navigate_to('login')
+            st.rerun()
 
-# Main app
-def main():
-    """Main application function."""
-    # Initialize session state
-    if 'page' not in st.session_state:
-        st.session_state.page = 'login'
-    
-    if 'user' not in st.session_state:
-        st.session_state.user = None
-    
-    # Render the appropriate page
-    if st.session_state.page == 'login':
-        render_login()
-    elif not st.session_state.user:
-        # If not logged in, redirect to login
-        st.session_state.page = 'login'
-        render_login()
-    elif st.session_state.page == 'dashboard':
-        render_dashboard()
-    elif st.session_state.page == 'new_analysis':
-        render_new_analysis()
-    elif st.session_state.page == 'report_history':
-        render_report_history()
-    elif st.session_state.page == 'view_report':
-        render_view_report()
-    elif st.session_state.page == 'prompt_library':
-        render_prompt_library()
-    elif st.session_state.page == 'settings':
-        render_settings()
-    else:
-        # Default to dashboard
-        st.session_state.page = 'dashboard'
-        render_dashboard()
-
+# Page rendering functions
 def render_login():
     """Render the login page."""
-    st.title("GA Analytics AI")
-    st.subheader("Login")
+    st.title("Login")
     
     with st.form("login_form"):
         email = st.text_input("Email")
@@ -611,22 +542,11 @@ def render_login():
         
         submitted = st.form_submit_button("Login")
         
-        if submitted:
-            if email and name:
-                # Add or get user
-                user = add_user(email, name)
-                
-                # Update last login
-                update_user_login(user['id'])
-                
-                # Set user in session state
-                st.session_state.user = user
-                
-                # Navigate to dashboard
-                navigate_to('dashboard')
-                st.rerun()  # Keep this rerun as it's needed for initial login
-            else:
-                st.error("Please enter both email and name")
+        if submitted and email and name:
+            user = add_user(email, name)
+            st.session_state.user = user
+            navigate_to('dashboard')
+            st.rerun()
 
 def render_dashboard():
     """Render the dashboard page."""
@@ -635,85 +555,55 @@ def render_dashboard():
     # Render sidebar navigation
     render_sidebar()
     
-    # Dashboard content
-    st.header("Dashboard")
-    
-    # Check if user has GA accounts
-    ga_accounts = get_ga_accounts(st.session_state.user['id'])
-    
-    if not ga_accounts:
-        st.warning("You haven't connected any Google Analytics accounts yet.")
-        
-        if st.button("Connect Google Analytics"):
-            navigate_to('settings')
-            st.rerun()  # Keep this rerun for button actions
-        
+    # Check if any GA accounts are configured
+    accounts = get_ga_accounts()
+    if not accounts:
+        st.warning("No Google Analytics accounts configured. Please add an account in the Settings page.")
         return
     
-    # Check if user has API keys
-    api_keys = get_api_keys(st.session_state.user['id'])
+    # Check if OpenAI API key is configured
+    api_keys = get_api_keys()
+    if 'openai' not in api_keys or not api_keys['openai'].get('api_key'):
+        st.warning("OpenAI API key not configured. Please add your API key in the Settings page.")
     
-    if not api_keys:
-        st.warning("You haven't added any API keys yet.")
+    # Display recent reports
+    reports = get_reports()
+    if reports:
+        st.subheader("Recent Reports")
         
-        if st.button("Add API Keys"):
-            navigate_to('settings')
-            st.rerun()  # Keep this rerun for button actions
-        
-        return
-    
-    # Recent reports
-    st.subheader("Recent Reports")
-    
-    reports = get_reports(st.session_state.user['id'])
-    
-    if not reports:
-        st.info("You haven't created any reports yet.")
-        
-        if st.button("Create New Analysis"):
-            navigate_to('new_analysis')
-            st.rerun()  # Keep this rerun for button actions
-    else:
         # Sort reports by creation date (newest first)
-        reports.sort(key=lambda x: x['created_at'], reverse=True)
+        reports.sort(key=lambda x: x.get('created_at', ''), reverse=True)
         
         # Display the 5 most recent reports
         for report in reports[:5]:
-            col1, col2 = st.columns([3, 1])
-            
-            with col1:
-                st.write(f"**{report['title']}**")
-                st.write(f"Created: {report['created_at'][:10]}")
-            
-            with col2:
-                if st.button("View", key=f"view_{report['id']}"):
-                    st.session_state.selected_report = report
-                    navigate_to('view_report')
-                    st.rerun()  # Keep this rerun for button actions
-        
-        if st.button("View All Reports"):
-            navigate_to('report_history')
-            st.rerun()  # Keep this rerun for button actions
+            with st.expander(f"{report['title']} ({report['created_at'][:10]})"):
+                st.write(report['description'])
+                
+                if 'data' in report and 'insights' in report['data']:
+                    st.markdown(report['data']['insights'])
+                
+                st.button("View Full Report", key=f"view_report_{report['id']}")
+    else:
+        st.info("No reports yet. Create your first analysis!")
     
     # Quick actions
     st.subheader("Quick Actions")
-    
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("New Analysis"):
+        if st.button("New Analysis", key="dashboard_new_analysis"):
             navigate_to('new_analysis')
-            st.rerun()  # Keep this rerun for button actions
+            st.rerun()
     
     with col2:
-        if st.button("Manage Prompts"):
-            navigate_to('prompt_library')
-            st.rerun()  # Keep this rerun for button actions
+        if st.button("View Reports", key="dashboard_view_reports"):
+            navigate_to('report_history')
+            st.rerun()
     
     with col3:
-        if st.button("Account Settings"):
+        if st.button("Settings", key="dashboard_settings"):
             navigate_to('settings')
-            st.rerun()  # Keep this rerun for button actions
+            st.rerun()
 
 def render_new_analysis():
     """Render the new analysis page."""
@@ -722,219 +612,166 @@ def render_new_analysis():
     # Render sidebar navigation
     render_sidebar()
     
-    # Check if user has GA accounts
-    ga_accounts = get_ga_accounts(st.session_state.user['id'])
-    
-    if not ga_accounts:
-        st.warning("You haven't connected any Google Analytics accounts yet.")
-        
-        if st.button("Connect Google Analytics"):
-            navigate_to('settings')
-            st.rerun()  # Keep this rerun for button actions
-        
+    # Check if any GA accounts are configured
+    accounts = get_ga_accounts()
+    if not accounts:
+        st.warning("No Google Analytics accounts configured. Please add an account in the Settings page.")
         return
     
-    # Check if user has API keys
-    api_keys = get_api_keys(st.session_state.user['id'])
-    
-    if not api_keys or 'openai' not in api_keys:
-        st.warning("You need to add an OpenAI API key to use this feature.")
-        
-        if st.button("Add API Keys"):
-            navigate_to('settings')
-            st.rerun()  # Keep this rerun for button actions
-        
+    # Check if OpenAI API key is configured
+    api_keys = get_api_keys()
+    if 'openai' not in api_keys or not api_keys['openai'].get('api_key'):
+        st.warning("OpenAI API key not configured. Please add your API key in the Settings page.")
         return
     
     # Analysis form
-    st.header("Analysis Configuration")
+    st.subheader("Select Analysis Type")
+    analysis_type = st.selectbox(
+        "Select Analysis Type",
+        options=["General Overview", "Traffic Analysis", "Conversion Analysis", "User Behavior", "Anomaly Detection", "Comparative Analysis"],
+        index=0
+    )
     
-    with st.form("analysis_form"):
-        # GA account selection
-        st.subheader("Google Analytics Account")
-        selected_account = st.selectbox(
-            "Select Account",
-            options=ga_accounts,
-            format_func=lambda x: f"{x['account_name']} ({x['property_id']})"
-        )
-        
-        # Date range
-        st.subheader("Date Range")
-        date_range_options = {
-            "last_7_days": "Last 7 Days",
-            "last_30_days": "Last 30 Days",
-            "last_90_days": "Last 90 Days",
-            "last_year": "Last Year",
-            "custom": "Custom Range"
-        }
-        
-        selected_date_range = st.selectbox(
-            "Select Date Range",
-            options=list(date_range_options.keys()),
-            format_func=lambda x: date_range_options[x]
-        )
-        
-        if selected_date_range == "custom":
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                start_date = st.date_input("Start Date")
-            
-            with col2:
-                end_date = st.date_input("End Date")
-        
-        # Analysis type
-        st.subheader("Analysis Type")
-        analysis_types = {
-            "general": "General Overview",
-            "traffic": "Traffic Analysis",
-            "conversion": "Conversion Analysis",
-            "user_behavior": "User Behavior Analysis",
-            "anomaly": "Anomaly Detection",
-            "comparative": "Comparative Analysis"
-        }
-        
-        selected_analysis_key = st.selectbox(
-            "Select Analysis Type",
-            options=list(analysis_types.keys()),
-            format_func=lambda x: analysis_types[x]
-        )
-        
-        # Prompt selection
-        st.subheader("Analysis Prompt")
-        
-        # Get prompts for the selected analysis type
-        prompts = get_prompts(st.session_state.user['id'])
-        filtered_prompts = [p for p in prompts if p.get('category') == selected_analysis_key]
-        
-        prompt_options = [{"id": None, "title": "Default Prompt"}] + filtered_prompts
-        
-        selected_prompt_index = st.selectbox(
-            "Select Prompt",
-            options=range(len(prompt_options)),
-            format_func=lambda i: prompt_options[i]['title']
-        )
-        
-        selected_prompt = prompt_options[selected_prompt_index] if selected_prompt_index > 0 else None
-        
-        # Report details
-        st.subheader("Report Details")
-        report_title = st.text_input("Report Title", value=f"{analysis_types[selected_analysis_key]} - {datetime.datetime.now().strftime('%Y-%m-%d')}")
-        report_description = st.text_area("Report Description", value=f"Analysis of {selected_analysis_key} data from Google Analytics.")
-        
-        # Submit button
-        submitted = st.form_submit_button("Run Analysis")
+    st.subheader("Analysis Prompt")
+    prompts = get_prompts()
+    prompt_options = ["Default Prompt"] + [p['name'] for p in prompts]
+    selected_prompt_name = st.selectbox("Select Prompt", options=prompt_options)
     
-    if submitted:
-        try:
-            st.info("Running analysis... This may take a few moments.")
-            
-            # Create date range dict
-            if selected_date_range == "custom":
-                date_range = {
-                    "start_date": start_date.strftime("%Y-%m-%d"),
-                    "end_date": end_date.strftime("%Y-%m-%d")
-                }
-            else:
-                # Map selected option to GA4 date range format
-                date_mapping = {
-                    "last_7_days": {"start_date": "7daysAgo", "end_date": "today"},
-                    "last_30_days": {"start_date": "30daysAgo", "end_date": "today"},
-                    "last_90_days": {"start_date": "90daysAgo", "end_date": "today"},
-                    "last_year": {"start_date": "365daysAgo", "end_date": "today"}
-                }
-                date_range = date_mapping[selected_date_range]
-            
-            # Get analysis configuration
-            if selected_analysis_key == "general":
-                analysis_config = AnalysisWorkflow.get_weekly_report_config()
-            elif selected_analysis_key == "traffic":
-                analysis_config = AnalysisWorkflow.get_traffic_overview_config()
-            elif selected_analysis_key == "conversion":
-                analysis_config = AnalysisWorkflow.get_conversion_overview_config()
-            elif selected_analysis_key == "user_behavior":
-                analysis_config = AnalysisWorkflow.get_user_behavior_config()
-            elif selected_analysis_key == "comparative":
-                analysis_config = AnalysisWorkflow.get_comparative_report_config()
-            else:
-                analysis_config = AnalysisWorkflow.get_weekly_report_config()
-            
-            # Add date range to config
-            analysis_config["date_range"] = date_range
-            
-            # Create analysis pipeline with correct parameters
-            pipeline = AnalysisPipeline(
-                ga_credentials_path=selected_account['credentials_path'],
-                llm_provider="openai",
-                llm_api_key=api_keys['openai']['api_key']
-            )
-            
-            # Authenticate with Google Analytics before running analysis
-            auth_success = pipeline.authenticate_ga()
-            if not auth_success:
-                st.error("Failed to authenticate with Google Analytics. Please check your credentials.")
-                return
-            
-            # Run analysis
-            results = pipeline.run_complete_analysis(
-                property_id=selected_account['property_id'],
-                metrics=analysis_config['metrics'],
-                dimensions=analysis_config['dimensions'],
-                date_range=analysis_config['date_range'],
-                analysis_type=analysis_config['analysis_type'],
-                custom_prompt=selected_prompt['prompt_template'] if selected_prompt else None
-            )
-            
-            # Generate report
-            report_generator = ReportGenerator()
-            report_content = report_generator.generate_markdown_report(
-                title=report_title,
-                description=report_description,
-                data=results['processed_data'],
-                insights=results['insights'],
-                metadata=results['metadata']
-            )
-            
-            # Save report to file
-            report_path = report_generator.save_report(
-                content=report_content,
-                directory=REPORTS_DIR,
-                filename=f"{selected_analysis_key}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
-            )
-            
-            # Save report to database
-            report = add_report(
-                user_id=st.session_state.user['id'],
-                title=report_title,
-                description=report_description,
-                analysis_type=selected_analysis_key,
-                report_content=report_content,
-                metadata=results['metadata'],
-                file_path=report_path
-            )
-            
-            # Increment prompt usage if a prompt was used
-            if selected_prompt:
-                increment_prompt_usage(selected_prompt['id'])
-            
-            # Show success message
-            st.success("Analysis completed successfully!")
-            
-            # Display the report
-            st.markdown("## Report Preview")
-            st.markdown(report_content)
-            
-            # Provide download link
-            st.markdown(get_file_download_link(report_path, "Download Report"), unsafe_allow_html=True)
-            
-            # Option to view in report history
-            if st.button("Go to Report History"):
-                navigate_to('report_history')
-                st.rerun()  # Keep this rerun for button actions
-            
-        except Exception as e:
-            st.error(f"Error running analysis: {str(e)}")
-            logger.error(f"Analysis error: {str(e)}", exc_info=True)
+    selected_prompt = None
+    if selected_prompt_name != "Default Prompt":
+        for p in prompts:
+            if p['name'] == selected_prompt_name:
+                selected_prompt = p
+                break
+    
+    st.subheader("Report Details")
+    report_title = st.text_input("Report Title", value=f"{analysis_type} - {datetime.datetime.now().strftime('%Y-%m-%d')}")
+    report_description = st.text_area("Report Description", value=f"Analysis of general data from Google Analytics.")
+    
+    # Account selection
+    st.subheader("Google Analytics Account")
+    account_options = [f"{a['name']} (Property: {a['property_id']})" for a in accounts]
+    selected_account_name = st.selectbox("Select Account", options=account_options)
+    
+    # Find the selected account
+    selected_account = None
+    for i, name in enumerate(account_options):
+        if name == selected_account_name:
+            selected_account = accounts[i]
+            break
+    
+    # Date range selection
+    st.subheader("Date Range")
+    date_range_options = ["Last 7 days", "Last 30 days", "Last 90 days", "Custom Range"]
+    selected_date_range = st.selectbox("Select Date Range", options=date_range_options)
+    
+    start_date = None
+    end_date = None
+    
+    if selected_date_range == "Custom Range":
+        col1, col2 = st.columns(2)
+        with col1:
+            start_date = st.date_input("Start Date", value=datetime.datetime.now() - datetime.timedelta(days=30))
+        with col2:
+            end_date = st.date_input("End Date", value=datetime.datetime.now())
+    else:
+        # Calculate date range based on selection
+        end_date = datetime.datetime.now().date()
+        if selected_date_range == "Last 7 days":
+            start_date = end_date - datetime.timedelta(days=7)
+        elif selected_date_range == "Last 30 days":
+            start_date = end_date - datetime.timedelta(days=30)
+        elif selected_date_range == "Last 90 days":
+            start_date = end_date - datetime.timedelta(days=90)
+    
+    # Format dates for GA API
+    start_date_str = start_date.strftime("%Y-%m-%d")
+    end_date_str = end_date.strftime("%Y-%m-%d")
+    
+    # Run analysis button
+    if st.button("Run Analysis"):
+        if selected_account:
+            with st.spinner("Running analysis... This may take a few moments."):
+                try:
+                    # Prepare analysis configuration
+                    analysis_config = {}
+                    
+                    # Set date range
+                    analysis_config['date_range'] = {
+                        'start_date': start_date_str,
+                        'end_date': end_date_str
+                    }
+                    
+                    # Set metrics and dimensions based on analysis type
+                    if analysis_type == "General Overview":
+                        analysis_config['metrics'] = ["sessions", "users", "pageviews", "bounceRate", "avgSessionDuration"]
+                        analysis_config['dimensions'] = ["date", "deviceCategory"]
+                        analysis_config['analysis_type'] = "general"
+                    elif analysis_type == "Traffic Analysis":
+                        analysis_config['metrics'] = ["sessions", "users", "newUsers", "pageviews", "sessionDuration"]
+                        analysis_config['dimensions'] = ["source", "medium", "date"]
+                        analysis_config['analysis_type'] = "traffic"
+                    elif analysis_type == "Conversion Analysis":
+                        analysis_config['metrics'] = ["goalCompletionsAll", "goalConversionRateAll", "goalValueAll"]
+                        analysis_config['dimensions'] = ["date", "deviceCategory", "source"]
+                        analysis_config['analysis_type'] = "conversion"
+                    elif analysis_type == "User Behavior":
+                        analysis_config['metrics'] = ["pageviews", "avgTimeOnPage", "bounceRate", "exitRate"]
+                        analysis_config['dimensions'] = ["pagePath", "deviceCategory"]
+                        analysis_config['analysis_type'] = "user_behavior"
+                    elif analysis_type == "Anomaly Detection":
+                        analysis_config['metrics'] = ["sessions", "users", "pageviews", "bounceRate"]
+                        analysis_config['dimensions'] = ["date"]
+                        analysis_config['analysis_type'] = "anomaly"
+                    elif analysis_type == "Comparative Analysis":
+                        analysis_config['metrics'] = ["sessions", "users", "pageviews", "bounceRate"]
+                        analysis_config['dimensions'] = ["date", "deviceCategory"]
+                        analysis_config['analysis_type'] = "comparative"
+                    
+                    # Initialize the analysis pipeline
+                    pipeline = AnalysisPipeline(
+                        ga_credentials_path=selected_account['credentials_path'],
+                        llm_provider="openai",
+                        llm_api_key=api_keys['openai']['api_key']
+                    )
+                    
+                    # Authenticate with Google Analytics
+                    auth_success = pipeline.authenticate_ga()
+                    if not auth_success:
+                        st.error("Failed to authenticate with Google Analytics. Please check your credentials.")
+                        return
+                    
+                    # Run the analysis
+                    results = pipeline.run_complete_analysis(
+                        property_id=selected_account['property_id'],
+                        metrics=analysis_config['metrics'],
+                        dimensions=analysis_config['dimensions'],
+                        date_range=analysis_config['date_range'],
+                        analysis_type=analysis_config['analysis_type'],
+                        custom_prompt=selected_prompt['prompt_template'] if selected_prompt else None
+                    )
+                    
+                    # Save the report
+                    report = add_report(
+                        title=report_title,
+                        description=report_description,
+                        report_data=results,
+                        user_id=st.session_state.user['id']
+                    )
+                    
+                    # Display the results
+                    st.success("Analysis completed successfully!")
+                    st.markdown(results['insights'])
+                    
+                    # Show raw data if available
+                    if 'raw_data' in results and not results['raw_data'].empty:
+                        with st.expander("View Raw Data"):
+                            st.dataframe(results['raw_data'])
+                    
+                except Exception as e:
+                    st.error(f"Error running analysis: {str(e)}")
+        else:
+            st.error("Please select a Google Analytics account.")
 
 def render_report_history():
     """Render the report history page."""
@@ -943,131 +780,39 @@ def render_report_history():
     # Render sidebar navigation
     render_sidebar()
     
-    # Get all reports for the user
-    reports = get_reports(st.session_state.user['id'])
+    # Get all reports
+    reports = get_reports()
     
     if not reports:
-        st.info("You haven't created any reports yet.")
-        
-        if st.button("Create New Analysis"):
-            navigate_to('new_analysis')
-            st.rerun()  # Keep this rerun for button actions
-        
+        st.info("No reports found. Create your first analysis!")
         return
     
     # Sort reports by creation date (newest first)
-    reports.sort(key=lambda x: x['created_at'], reverse=True)
-    
-    # Filtering options
-    st.header("Filter Reports")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Get unique analysis types
-        analysis_types = list(set(report['analysis_type'] for report in reports))
-        selected_types = st.multiselect("Analysis Type", analysis_types, default=analysis_types)
-    
-    with col2:
-        # Date range filter
-        date_filter = st.selectbox("Date Filter", ["All Time", "Last 7 Days", "Last 30 Days", "Last 90 Days"])
-        
-        if date_filter != "All Time":
-            days = int(date_filter.split()[1])
-            cutoff_date = (datetime.datetime.now() - datetime.timedelta(days=days)).isoformat()
-            reports = [r for r in reports if r['created_at'] > cutoff_date]
-    
-    # Filter by selected types
-    if selected_types:
-        reports = [r for r in reports if r['analysis_type'] in selected_types]
+    reports.sort(key=lambda x: x.get('created_at', ''), reverse=True)
     
     # Display reports
-    st.header("Reports")
-    
     for report in reports:
-        col1, col2, col3 = st.columns([3, 1, 1])
-        
-        with col1:
-            st.write(f"**{report['title']}**")
-            st.write(f"Created: {report['created_at'][:10]}")
-        
-        with col2:
-            st.write(f"Type: {report['analysis_type']}")
-            if report.get('is_favorite'):
-                st.write("⭐ Favorite")
-        
-        with col3:
-            if st.button("View", key=f"view_{report['id']}"):
-                st.session_state.selected_report = report
-                navigate_to('view_report')
-                st.rerun()  # Keep this rerun for button actions
+        with st.expander(f"{report['title']} ({report['created_at'][:10]})"):
+            st.write(report['description'])
             
-            # Toggle favorite status
-            favorite_label = "Remove Favorite" if report.get('is_favorite') else "Add Favorite"
-            if st.button(favorite_label, key=f"fav_{report['id']}"):
-                update_report(report['id'], {'is_favorite': not report.get('is_favorite', False)})
-                st.rerun()  # Keep this rerun for button actions
-        
-        st.markdown("---")
-
-def render_view_report():
-    """Render the view report page."""
-    # Render sidebar navigation
-    render_sidebar()
-    
-    if 'selected_report' not in st.session_state:
-        st.error("No report selected")
-        
-        if st.button("Back to Report History"):
-            navigate_to('report_history')
-            st.rerun()  # Keep this rerun for button actions
-        
-        return
-    
-    report = st.session_state.selected_report
-    
-    st.title(report['title'])
-    
-    st.write(f"**Description:** {report['description']}")
-    st.write(f"**Analysis Type:** {report['analysis_type']}")
-    st.write(f"**Created:** {report['created_at'][:10]}")
-    
-    # Display report content
-    if report.get('file_path') and os.path.exists(report['file_path']):
-        with open(report['file_path'], 'r') as f:
-            report_content = f.read()
-        
-        st.markdown(report_content)
-        
-        # Provide download link
-        st.markdown(get_file_download_link(report['file_path'], "Download Report"), unsafe_allow_html=True)
-    else:
-        st.warning("Report file not found")
-    
-    # Actions
-    st.markdown("---")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        # Toggle favorite status
-        favorite_label = "Remove from Favorites" if report.get('is_favorite') else "Add to Favorites"
-        if st.button(favorite_label):
-            update_report(report['id'], {'is_favorite': not report.get('is_favorite', False)})
-            st.session_state.selected_report = update_report(report['id'], {})  # Refresh the report
-            st.rerun()  # Keep this rerun for button actions
-    
-    with col2:
-        # Run similar analysis
-        if st.button("Run Similar Analysis"):
-            navigate_to('new_analysis')
-            st.rerun()  # Keep this rerun for button actions
-    
-    with col3:
-        # Back to report history
-        if st.button("Back to Report History"):
-            navigate_to('report_history')
-            st.rerun()  # Keep this rerun for button actions
+            if 'data' in report and 'insights' in report['data']:
+                st.markdown(report['data']['insights'])
+            
+            # Actions
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if st.button("View Full Report", key=f"view_full_report_{report['id']}"):
+                    # TODO: Implement full report view
+                    st.info("Full report view not implemented yet.")
+            
+            with col2:
+                if st.button("Delete Report", key=f"delete_report_{report['id']}"):
+                    if delete_report(report['id']):
+                        st.success("Report deleted successfully.")
+                        st.rerun()
+                    else:
+                        st.error("Failed to delete report.")
 
 def render_prompt_library():
     """Render the prompt library page."""
@@ -1076,194 +821,83 @@ def render_prompt_library():
     # Render sidebar navigation
     render_sidebar()
     
-    # Get all prompts for the user
-    prompts = get_prompts(st.session_state.user['id'])
+    # Get all prompts
+    prompts = get_prompts()
     
-    # Tabs for viewing and creating prompts
-    tab1, tab2 = st.tabs(["View Prompts", "Create New Prompt"])
-    
-    with tab1:
-        if not prompts:
-            st.info("No prompts found. Create your first prompt!")
-        else:
-            # Filtering options
-            st.header("Filter Prompts")
+    # Add new prompt form
+    with st.expander("Add New Prompt"):
+        with st.form("add_prompt_form"):
+            prompt_name = st.text_input("Prompt Name")
+            prompt_description = st.text_area("Description")
+            prompt_template = st.text_area("Prompt Template")
             
-            col1, col2 = st.columns(2)
+            submitted = st.form_submit_button("Add Prompt")
             
-            with col1:
-                # Get unique categories
-                categories = list(set(prompt.get('category', 'uncategorized') for prompt in prompts))
-                selected_categories = st.multiselect("Category", categories, default=categories)
-            
-            with col2:
-                # Show system prompts option
-                show_system = st.checkbox("Show System Prompts", value=True)
-            
-            # Filter prompts
-            filtered_prompts = prompts
-            
-            if selected_categories:
-                filtered_prompts = [p for p in filtered_prompts if p.get('category') in selected_categories]
-            
-            if not show_system:
-                filtered_prompts = [p for p in filtered_prompts if not p.get('is_system', False)]
-            
-            # Display prompts
-            st.header("Prompts")
-            
-            for prompt in filtered_prompts:
-                with st.expander(f"{prompt['title']} ({prompt.get('category', 'uncategorized')})"):
-                    st.write(f"**Description:** {prompt['description']}")
-                    
-                    if prompt.get('is_system'):
-                        st.write("**System Prompt**")
-                    
-                    st.write(f"**Usage Count:** {prompt.get('usage_count', 0)}")
-                    
-                    # Display template
-                    st.subheader("Template")
-                    st.code(prompt['prompt_template'])
-                    
-                    # Display parameters
-                    if prompt.get('parameters'):
-                        st.subheader("Parameters")
-                        for param_name, param_default in prompt['parameters'].items():
-                            st.write(f"- **{param_name}:** {param_default}")
-                    
-                    # Actions
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        # Toggle favorite status
-                        favorite_label = "Remove from Favorites" if prompt.get('is_favorite') else "Add to Favorites"
-                        if not prompt.get('is_system') and st.button(favorite_label, key=f"fav_{prompt['id']}"):
-                            update_prompt(prompt['id'], {'is_favorite': not prompt.get('is_favorite', False)})
-                            st.rerun()  # Keep this rerun for button actions
-                    
-                    with col2:
-                        # Edit prompt (only for user prompts)
-                        if not prompt.get('is_system') and st.button("Edit", key=f"edit_{prompt['id']}"):
-                            st.session_state.selected_prompt = prompt
-                            st.session_state.editing_prompt = True
-                            st.rerun()  # Keep this rerun for button actions
-    
-    with tab2:
-        # Check if we're editing an existing prompt
-        editing = hasattr(st.session_state, 'editing_prompt') and st.session_state.editing_prompt
-        selected_prompt = getattr(st.session_state, 'selected_prompt', None) if editing else None
-        
-        if editing:
-            st.header(f"Edit Prompt: {selected_prompt['title']}")
-        else:
-            st.header("Create New Prompt")
-        
-        # Prompt form
-        title = st.text_input("Title", value=selected_prompt['title'] if editing else "")
-        description = st.text_area("Description", value=selected_prompt['description'] if editing else "")
-        
-        # Categories
-        categories = ["general", "traffic", "conversion", "user_behavior", "anomaly", "comparative", "custom"]
-        category = st.selectbox("Category", categories, index=categories.index(selected_prompt['category']) if editing and selected_prompt.get('category') in categories else 0)
-        
-        # Template
-        st.subheader("Prompt Template")
-        st.write("Use {placeholders} for parameters that will be filled at runtime.")
-        prompt_template = st.text_area("Template", value=selected_prompt['prompt_template'] if editing else "", height=200)
-        
-        # Parameters
-        st.subheader("Parameters")
-        st.write("Define default values for parameters used in the template.")
-        
-        # Initialize parameters
-        if 'prompt_params' not in st.session_state:
-            st.session_state.prompt_params = selected_prompt.get('parameters', {}).copy() if editing else {}
-        
-        # Display existing parameters
-        for param_name, param_value in list(st.session_state.prompt_params.items()):
-            col1, col2, col3 = st.columns([2, 3, 1])
-            
-            with col1:
-                st.text(param_name)
-            
-            with col2:
-                new_value = st.text_input(f"Value for {param_name}", value=param_value, key=f"param_{param_name}")
-                st.session_state.prompt_params[param_name] = new_value
-            
-            with col3:
-                if st.button("Remove", key=f"remove_{param_name}"):
-                    del st.session_state.prompt_params[param_name]
-                    st.rerun()  # Keep this rerun for button actions
-        
-        # Add new parameter
-        st.subheader("Add Parameter")
-        col1, col2, col3 = st.columns([2, 3, 1])
-        
-        with col1:
-            new_param_name = st.text_input("Parameter Name")
-        
-        with col2:
-            new_param_value = st.text_input("Default Value")
-        
-        with col3:
-            if st.button("Add") and new_param_name:
-                st.session_state.prompt_params[new_param_name] = new_param_value
-                st.rerun()  # Keep this rerun for button actions
-        
-        # Save button
-        if editing:
-            if st.button("Update Prompt"):
-                if title and prompt_template:
-                    # Update the prompt
-                    update_prompt(selected_prompt['id'], {
-                        'title': title,
-                        'description': description,
-                        'prompt_template': prompt_template,
-                        'parameters': st.session_state.prompt_params,
-                        'category': category
-                    })
-                    
-                    # Reset editing state
-                    st.session_state.editing_prompt = False
-                    st.session_state.selected_prompt = None
-                    
-                    # Clear parameters
-                    st.session_state.prompt_params = {}
-                    
-                    st.success("Prompt updated successfully!")
-                    st.rerun()  # Keep this rerun for button actions
+            if submitted and prompt_name and prompt_template:
+                new_prompt = add_prompt(prompt_name, prompt_description, prompt_template)
+                if new_prompt:
+                    st.success(f"Prompt '{prompt_name}' added successfully.")
+                    st.rerun()
                 else:
-                    st.error("Title and template are required")
+                    st.error("Failed to add prompt.")
+    
+    # Display existing prompts
+    if prompts:
+        st.subheader("Existing Prompts")
+        
+        for prompt in prompts:
+            with st.expander(f"{prompt['name']}"):
+                st.write(prompt['description'])
+                st.text_area(f"Template for {prompt['name']}", value=prompt['prompt_template'], height=200, key=f"template_{prompt['id']}")
+                
+                # Actions
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if st.button("Edit", key=f"edit_prompt_{prompt['id']}"):
+                        st.session_state.editing_prompt = prompt
+                
+                with col2:
+                    if st.button("Delete", key=f"delete_prompt_{prompt['id']}"):
+                        if delete_prompt(prompt['id']):
+                            st.success(f"Prompt '{prompt['name']}' deleted successfully.")
+                            st.rerun()
+                        else:
+                            st.error("Failed to delete prompt.")
+        
+        # Edit prompt form
+        if hasattr(st.session_state, 'editing_prompt') and st.session_state.editing_prompt:
+            prompt = st.session_state.editing_prompt
             
-            if st.button("Cancel"):
-                # Reset editing state
-                st.session_state.editing_prompt = False
-                st.session_state.selected_prompt = None
+            st.subheader(f"Edit Prompt: {prompt['name']}")
+            
+            with st.form("edit_prompt_form"):
+                edited_name = st.text_input("Prompt Name", value=prompt['name'])
+                edited_description = st.text_area("Description", value=prompt['description'])
+                edited_template = st.text_area("Prompt Template", value=prompt['prompt_template'], height=300)
                 
-                # Clear parameters
-                st.session_state.prompt_params = {}
+                col1, col2 = st.columns(2)
                 
-                st.rerun()  # Keep this rerun for button actions
-        else:
-            if st.button("Create Prompt"):
-                if title and prompt_template:
-                    # Add the prompt
-                    add_prompt(
-                        user_id=st.session_state.user['id'],
-                        title=title,
-                        description=description,
-                        prompt_template=prompt_template,
-                        parameters=st.session_state.prompt_params,
-                        category=category
-                    )
-                    
-                    # Clear parameters
-                    st.session_state.prompt_params = {}
-                    
-                    st.success("Prompt created successfully!")
-                    st.rerun()  # Keep this rerun for button actions
-                else:
-                    st.error("Title and template are required")
+                with col1:
+                    submitted = st.form_submit_button("Save Changes")
+                
+                with col2:
+                    cancelled = st.form_submit_button("Cancel")
+                
+                if submitted and edited_name and edited_template:
+                    updated_prompt = update_prompt(prompt['id'], edited_name, edited_description, edited_template)
+                    if updated_prompt:
+                        st.success(f"Prompt '{edited_name}' updated successfully.")
+                        st.session_state.editing_prompt = None
+                        st.rerun()
+                    else:
+                        st.error("Failed to update prompt.")
+                
+                if cancelled:
+                    st.session_state.editing_prompt = None
+                    st.rerun()
+    else:
+        st.info("No prompts found. Add your first prompt using the form above.")
 
 def render_settings():
     """Render the settings page."""
@@ -1272,168 +906,105 @@ def render_settings():
     # Render sidebar navigation
     render_sidebar()
     
-    # Tabs for different settings
-    tab1, tab2, tab3 = st.tabs(["Google Analytics", "API Keys", "User Settings"])
+    # API Keys section
+    st.header("API Keys")
     
-    with tab1:
-        st.header("Google Analytics Accounts")
+    api_keys = get_api_keys()
+    
+    with st.form("api_keys_form"):
+        openai_api_key = st.text_input(
+            "OpenAI API Key",
+            value=api_keys.get('openai', {}).get('api_key', ''),
+            type="password"
+        )
         
-        # Display existing accounts
-        ga_accounts = get_ga_accounts(st.session_state.user['id'])
+        submitted = st.form_submit_button("Save API Keys")
         
-        if ga_accounts:
-            st.subheader("Connected Accounts")
-            
-            for account in ga_accounts:
-                col1, col2 = st.columns([3, 1])
-                
-                with col1:
-                    st.write(f"**{account['account_name']}**")
-                    st.write(f"Property ID: {account['property_id']}")
-                    st.write(f"Connected: {account['created_at'][:10]}")
-                
-                with col2:
-                    # Add delete button
-                    if st.button("Delete", key=f"delete_{account['id']}"):
-                        if delete_ga_account(account['id']):
-                            st.success(f"Account {account['account_name']} deleted successfully!")
-                            st.rerun()  # Keep this rerun for button actions
-                        else:
-                            st.error("Failed to delete account")
-                
-                st.markdown("---")
-        else:
-            st.info("No Google Analytics accounts connected")
-        
-        # Add new account
-        st.subheader("Add New Account")
-        
+        if submitted:
+            if openai_api_key:
+                update_api_key('openai', openai_api_key)
+                st.success("API keys saved successfully.")
+            else:
+                st.error("OpenAI API key is required.")
+    
+    # Google Analytics Accounts section
+    st.header("Google Analytics")
+    
+    # Add new account form
+    with st.expander("Add New Account"):
         with st.form("add_ga_account_form"):
             account_name = st.text_input("Account Name")
-            property_id = st.text_input("Property ID")
+            property_id = st.text_input("Property ID", help="Format: 123456789")
+            credentials_file = st.file_uploader("OAuth Credentials JSON", type=["json"])
             
-            # Add file uploader for OAuth credentials
-            st.write("**OAuth Credentials**")
-            st.write("Upload your Google OAuth credentials JSON file. This file contains the client ID and secret needed to authenticate with Google Analytics.")
-            uploaded_credentials = st.file_uploader("Upload OAuth Credentials JSON", type=["json"])
-            
-            # Submit button
             submitted = st.form_submit_button("Add Account")
-        
-        if submitted:
-            if account_name and property_id and uploaded_credentials:
-                try:
-                    # Create a unique filename for the credentials
-                    credentials_filename = f"ga_oauth_{st.session_state.user['id']}_{uuid.uuid4()}.json"
-                    
-                    # Save the uploaded credentials file
-                    credentials_path = save_uploaded_file(
-                        uploaded_credentials, 
-                        CREDENTIALS_DIR, 
-                        credentials_filename
-                    )
-                    
-                    # Add the account
-                    add_ga_account(
-                        user_id=st.session_state.user['id'],
-                        account_name=account_name,
-                        property_id=property_id,
-                        credentials_path=credentials_path
-                    )
-                    
-                    st.success("Account added successfully!")
-                    st.rerun()  # Keep this rerun for button actions
-                except Exception as e:
-                    st.error(f"Error adding account: {str(e)}")
-                    logger.error(f"Error adding GA account: {str(e)}", exc_info=True)
-            else:
-                st.error("Please fill in all fields and upload credentials file")
+            
+            if submitted:
+                if account_name and property_id and credentials_file:
+                    try:
+                        new_account = add_ga_account(account_name, property_id, credentials_file)
+                        if new_account:
+                            st.success(f"Account '{account_name}' added successfully.")
+                            st.rerun()
+                        else:
+                            st.error("Failed to add account.")
+                    except Exception as e:
+                        st.error(f"Error adding account: {str(e)}")
+                else:
+                    st.error("All fields are required.")
     
-    with tab2:
-        st.header("API Keys")
-        
-        # Display existing API keys
-        api_keys = get_api_keys(st.session_state.user['id'])
-        
-        if api_keys:
-            st.subheader("Saved API Keys")
-            
-            for service, key_data in api_keys.items():
-                st.write(f"**{service.capitalize()}**")
-                st.write(f"Added: {key_data['created_at'][:10]}")
-                st.write(f"Last Updated: {key_data['updated_at'][:10]}")
-                
-                # Show masked key
-                masked_key = "•" * 20 + key_data['api_key'][-5:] if len(key_data['api_key']) > 5 else "•" * 20
-                st.code(masked_key)
-                
-                st.markdown("---")
-        else:
-            st.info("No API keys added yet")
-        
-        # Add new API key
-        st.subheader("Add/Update API Key")
-        
-        with st.form("add_api_key_form"):
-            service = st.selectbox("Service", ["openai", "anthropic", "google", "ollama"])
-            api_key = st.text_input("API Key", type="password")
-            
-            # Submit button
-            submitted = st.form_submit_button("Save API Key")
-        
-        if submitted:
-            if service and api_key:
-                # Add the API key
-                add_api_key(
-                    user_id=st.session_state.user['id'],
-                    service=service,
-                    api_key=api_key
-                )
-                
-                st.success(f"{service.capitalize()} API key saved successfully!")
-                st.rerun()  # Keep this rerun for button actions
-            else:
-                st.error("Please select a service and enter an API key")
+    # Display existing accounts
+    accounts = get_ga_accounts()
     
-    with tab3:
-        st.header("User Settings")
+    if accounts:
+        st.subheader("Existing Accounts")
         
-        # Display user information
-        st.subheader("User Information")
-        st.write(f"**Name:** {st.session_state.user['name']}")
-        st.write(f"**Email:** {st.session_state.user['email']}")
-        st.write(f"**Account Created:** {st.session_state.user['created_at'][:10]}")
-        st.write(f"**Last Login:** {st.session_state.user['last_login'][:10]}")
-        
-        # Update user information
-        st.subheader("Update Information")
-        
-        with st.form("update_user_form"):
-            new_name = st.text_input("Name", value=st.session_state.user['name'])
-            
-            # Submit button
-            submitted = st.form_submit_button("Update Information")
-        
-        if submitted:
-            if new_name:
-                # Update user information
-                users = load_json_db(USERS_DB)
+        for account in accounts:
+            with st.expander(f"{account['name']} (Property: {account['property_id']})"):
+                st.write(f"ID: {account['id']}")
+                st.write(f"Created: {account['created_at'][:10]}")
+                st.write(f"Credentials Path: {account['credentials_path']}")
                 
-                for user in users:
-                    if user['id'] == st.session_state.user['id']:
-                        user['name'] = new_name
-                        break
-                
-                save_json_db(USERS_DB, users)
-                
-                # Update session state
-                st.session_state.user['name'] = new_name
-                
-                st.success("User information updated successfully!")
-                st.rerun()  # Keep this rerun for button actions
-            else:
-                st.error("Name cannot be empty")
+                if st.button("Delete Account", key=f"delete_account_{account['id']}"):
+                    if delete_ga_account(account['id']):
+                        st.success(f"Account '{account['name']}' deleted successfully.")
+                        st.rerun()
+                    else:
+                        st.error("Failed to delete account.")
+    else:
+        st.info("No Google Analytics accounts configured. Add your first account using the form above.")
 
-# Run the app
+# Main app logic
+def main():
+    """Main application entry point."""
+    # Initialize session state
+    if 'page' not in st.session_state:
+        st.session_state.page = 'login'
+    
+    if 'user' not in st.session_state:
+        st.session_state.user = None
+    
+    # Check if user is logged in
+    if st.session_state.user is None and st.session_state.page != 'login':
+        st.session_state.page = 'login'
+    
+    # Render the appropriate page
+    if st.session_state.page == 'login':
+        render_login()
+    elif st.session_state.page == 'dashboard':
+        render_dashboard()
+    elif st.session_state.page == 'new_analysis':
+        render_new_analysis()
+    elif st.session_state.page == 'report_history':
+        render_report_history()
+    elif st.session_state.page == 'prompt_library':
+        render_prompt_library()
+    elif st.session_state.page == 'settings':
+        render_settings()
+    else:
+        st.error(f"Unknown page: {st.session_state.page}")
+        st.session_state.page = 'login'
+        st.rerun()
+
 if __name__ == "__main__":
     main()
