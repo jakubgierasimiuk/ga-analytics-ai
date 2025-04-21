@@ -12,7 +12,7 @@ from google.analytics.data_v1beta.types import (
     Dimension,
     Metric
 )
-import openai
+from openai import OpenAI  # Updated import for OpenAI
 import re
 import uuid
 import shutil
@@ -20,7 +20,51 @@ import sys
 
 # Add the current directory to the path to import the GA4 metrics mapping module
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from ga4_metrics_mapping import select_metrics_from_prompt, GA4_METRICS_MAPPING, VALID_GA4_METRICS
+try:
+    from ga4_metrics_mapping import select_metrics_from_prompt, GA4_METRICS_MAPPING, VALID_GA4_METRICS
+except ImportError:
+    # Fallback if the module is not available
+    # Define basic mappings directly in the code
+    GA4_METRICS_MAPPING = {
+        "General Overview": {
+            "dimensions": ["date"],
+            "metrics": ["activeUsers", "sessions", "screenPageViews", "engagementRate"]
+        },
+        "Audience Analysis": {
+            "dimensions": ["deviceCategory", "country", "city"],
+            "metrics": ["activeUsers", "newUsers", "sessions", "averageSessionDuration"]
+        },
+        "Acquisition Analysis": {
+            "dimensions": ["sessionSource", "sessionMedium", "sessionCampaignName"],
+            "metrics": ["activeUsers", "sessions", "engagementRate", "averageSessionDuration"]
+        },
+        "Behavior Analysis": {
+            "dimensions": ["pagePath", "deviceCategory"],
+            "metrics": ["screenPageViews", "averageSessionDuration", "engagementRate", "eventCount"]
+        },
+        "Conversion Analysis": {
+            "dimensions": ["date"],
+            "metrics": ["conversions", "eventCount", "eventValue"]
+        }
+    }
+    
+    VALID_GA4_METRICS = {
+        "activeUsers": "The number of distinct users who visited your site or app.",
+        "newUsers": "The number of users who visited your site or app for the first time.",
+        "totalUsers": "The total number of users who visited your site or app.",
+        "sessions": "The number of sessions that began on your site or app.",
+        "averageSessionDuration": "The average duration (in seconds) of users' sessions.",
+        "screenPageViews": "The number of app screens or web pages your users viewed.",
+        "engagedSessions": "The number of sessions that lasted longer than 10 seconds, or had a conversion event, or had 2 or more screen or page views.",
+        "engagementRate": "The percentage of engaged sessions (Engaged sessions divided by Sessions).",
+        "eventCount": "The count of events.",
+        "eventValue": "The sum of the event parameter named value.",
+        "conversions": "The number of conversions."
+    }
+    
+    def select_metrics_from_prompt(prompt: str) -> dict:
+        """Fallback function if module is not available"""
+        return GA4_METRICS_MAPPING["General Overview"]
 
 # Set page configuration
 st.set_page_config(
@@ -339,8 +383,8 @@ def render_new_analysis():
                     st.error("OpenAI API key not configured. Please add it in Settings.")
                     return
                 
-                # Initialize OpenAI client
-                openai.api_key = api_key
+                # Initialize OpenAI client with new API
+                client = OpenAI(api_key=api_key)
                 
                 # Prepare data for OpenAI
                 df_str = df.to_string()
@@ -358,8 +402,8 @@ def render_new_analysis():
                 Please provide a detailed analysis with insights and recommendations.
                 """
                 
-                # Call OpenAI API
-                response = openai.ChatCompletion.create(
+                # Call OpenAI API with new interface
+                response = client.chat.completions.create(
                     model="gpt-4",
                     messages=[
                         {"role": "system", "content": "You are a Google Analytics expert who provides insightful analysis."},
@@ -367,7 +411,7 @@ def render_new_analysis():
                     ]
                 )
                 
-                # Extract insights
+                # Extract insights with new API response format
                 insights = response.choices[0].message.content
                 
                 # Save report
