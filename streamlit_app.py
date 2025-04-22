@@ -21,7 +21,15 @@ import sys
 # Add the current directory to the path to import the GA4 metrics mapping module
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 try:
-    from ga4_metrics_mapping import select_metrics_from_prompt, GA4_METRICS_MAPPING, VALID_GA4_METRICS
+    from ga4_metrics_mapping_improved import (
+        select_metrics_from_prompt, 
+        get_analysis_config_for_type, 
+        GA4_METRICS_MAPPING, 
+        VALID_GA4_METRICS,
+        VALID_GA4_DIMENSIONS,
+        is_compatible_combination,
+        get_safe_metrics_and_dimensions
+    )
 except ImportError:
     # Fallback if the module is not available
     # Define basic mappings directly in the code
@@ -62,8 +70,36 @@ except ImportError:
         "conversions": "The number of conversions."
     }
     
+    VALID_GA4_DIMENSIONS = {
+        "date": "The date of the session (YYYYMMDD).",
+        "deviceCategory": "The device category (mobile, tablet, desktop).",
+        "country": "The country from which sessions originated.",
+        "city": "The city from which sessions originated.",
+        "sessionSource": "The source of the session (e.g., 'google', 'facebook').",
+        "sessionMedium": "The medium of the session (e.g., 'organic', 'cpc').",
+        "sessionCampaignName": "The campaign name of the session.",
+        "pagePath": "The path of the page."
+    }
+    
+    def is_compatible_combination(dimensions, metrics):
+        """Fallback function if module is not available"""
+        return True
+    
+    def get_safe_metrics_and_dimensions(dimensions, metrics):
+        """Fallback function if module is not available"""
+        return {
+            "dimensions": ["date"],
+            "metrics": ["activeUsers", "sessions"]
+        }
+    
     def select_metrics_from_prompt(prompt: str) -> dict:
         """Fallback function if module is not available"""
+        return GA4_METRICS_MAPPING["General Overview"]
+    
+    def get_analysis_config_for_type(analysis_type: str) -> dict:
+        """Fallback function if module is not available"""
+        if analysis_type in GA4_METRICS_MAPPING:
+            return GA4_METRICS_MAPPING[analysis_type]
         return GA4_METRICS_MAPPING["General Overview"]
 
 # Set page configuration
@@ -333,9 +369,18 @@ def render_new_analysis():
                 if use_custom_prompt:
                     # Use intelligent metric selection based on prompt
                     analysis_config = select_metrics_from_prompt(prompt)
+                    st.info(f"Selected metrics based on prompt: {', '.join(analysis_config['metrics'])}")
+                    st.info(f"Selected dimensions based on prompt: {', '.join(analysis_config['dimensions'])}")
                 else:
                     # Use predefined metrics for the selected analysis type
-                    analysis_config = GA4_METRICS_MAPPING[analysis_type]
+                    analysis_config = get_analysis_config_for_type(analysis_type)
+                
+                # Verify compatibility of metrics and dimensions
+                if not is_compatible_combination(analysis_config['dimensions'], analysis_config['metrics']):
+                    st.warning("The selected combination of metrics and dimensions is not compatible. Using safe alternatives.")
+                    analysis_config = get_safe_metrics_and_dimensions(analysis_config['dimensions'], analysis_config['metrics'])
+                    st.info(f"Using metrics: {', '.join(analysis_config['metrics'])}")
+                    st.info(f"Using dimensions: {', '.join(analysis_config['dimensions'])}")
                 
                 # Get GA account details
                 account_details = st.session_state.ga_accounts[account_name]
@@ -465,6 +510,7 @@ def render_new_analysis():
             
             except Exception as e:
                 st.error(f"Error running analysis: {str(e)}")
+                st.error("Please try a different combination of metrics and dimensions or a different prompt.")
 
 # Report History page
 def render_report_history():
@@ -638,6 +684,37 @@ def render_settings():
         st.markdown("| --- | --- |")
         for row in metrics_table:
             st.markdown(row)
+    
+    with st.expander("Common GA4 Dimensions"):
+        st.markdown("""
+        Here are some common GA4 dimensions you can use in your analyses:
+        """)
+        
+        # Create a table of dimensions and descriptions
+        dimensions_table = []
+        for dimension, description in VALID_GA4_DIMENSIONS.items():
+            dimensions_table.append(f"| `{dimension}` | {description} |")
+        
+        st.markdown("| Dimension | Description |")
+        st.markdown("| --- | --- |")
+        for row in dimensions_table:
+            st.markdown(row)
+    
+    with st.expander("Compatibility Information"):
+        st.markdown("""
+        ### Metric and Dimension Compatibility
+        
+        Not all metrics and dimensions can be used together in GA4. The application will automatically check for compatibility and use safe alternatives if needed.
+        
+        Common incompatible combinations:
+        - `itemName` and `grossItemRevenue` cannot be used together
+        - Some e-commerce metrics require specific e-commerce tracking setup in GA4
+        
+        If you encounter compatibility errors, try:
+        1. Using a different analysis type
+        2. Using a custom prompt that focuses on general metrics
+        3. Checking your GA4 property setup to ensure all required features are enabled
+        """)
 
 # Main app logic
 def main():
