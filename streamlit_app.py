@@ -12,7 +12,7 @@ from google.analytics.data_v1beta.types import (
     Dimension,
     Metric
 )
-from openai import OpenAI  # Updated import for OpenAI
+from openai import OpenAI
 import re
 import uuid
 import shutil
@@ -102,6 +102,43 @@ except ImportError:
             return GA4_METRICS_MAPPING[analysis_type]
         return GA4_METRICS_MAPPING["General Overview"]
 
+# OpenAI model options
+OPENAI_MODELS = {
+    "o3": {
+        "name": "OpenAI o3",
+        "description": "Najnowszy i najpotężniejszy model rozumowania z wiodącą wydajnością w kodowaniu, matematyce i nauce",
+        "max_tokens": 128000,
+        "default_response_tokens": 4000
+    },
+    "gpt-4o": {
+        "name": "GPT-4o",
+        "description": "Zaawansowany model z doskonałą jakością analizy",
+        "max_tokens": 128000,
+        "default_response_tokens": 4000
+    },
+    "gpt-4-turbo": {
+        "name": "GPT-4 Turbo",
+        "description": "Dobry kompromis między wydajnością a kosztem",
+        "max_tokens": 128000,
+        "default_response_tokens": 4000
+    },
+    "gpt-4": {
+        "name": "GPT-4",
+        "description": "Standardowy model GPT-4, dobra jakość analizy",
+        "max_tokens": 8192,
+        "default_response_tokens": 2000
+    },
+    "gpt-3.5-turbo": {
+        "name": "GPT-3.5 Turbo",
+        "description": "Szybki i ekonomiczny model, mniejsza zdolność do złożonych analiz",
+        "max_tokens": 16384,
+        "default_response_tokens": 2000
+    }
+}
+
+# Default model
+DEFAULT_MODEL = "o3"
+
 # Set page configuration
 st.set_page_config(
     page_title="GA Analytics AI",
@@ -130,6 +167,10 @@ if 'prompts' not in st.session_state:
     st.session_state.prompts = {
         'Default Prompt': "Analyze the following Google Analytics data and provide insights. Focus on trends, anomalies, and actionable recommendations."
     }
+if 'openai_model' not in st.session_state:
+    st.session_state.openai_model = DEFAULT_MODEL
+if 'max_response_tokens' not in st.session_state:
+    st.session_state.max_response_tokens = OPENAI_MODELS[DEFAULT_MODEL]["default_response_tokens"]
 
 # Create directories if they don't exist
 os.makedirs('credentials', exist_ok=True)
@@ -158,6 +199,13 @@ def save_session_state():
     # Save reports
     with open('reports/reports.json', 'w') as f:
         json.dump(st.session_state.reports, f)
+    
+    # Save OpenAI model settings
+    with open('credentials/openai_settings.json', 'w') as f:
+        json.dump({
+            'model': st.session_state.openai_model,
+            'max_response_tokens': st.session_state.max_response_tokens
+        }, f)
 
 # Load session state from disk
 def load_session_state():
@@ -198,6 +246,16 @@ def load_session_state():
             st.session_state.reports = json.load(f)
     except FileNotFoundError:
         pass
+    
+    # Load OpenAI model settings
+    try:
+        with open('credentials/openai_settings.json', 'r') as f:
+            settings = json.load(f)
+            st.session_state.openai_model = settings.get('model', DEFAULT_MODEL)
+            st.session_state.max_response_tokens = settings.get('max_response_tokens', 
+                                                              OPENAI_MODELS[st.session_state.openai_model]["default_response_tokens"])
+    except FileNotFoundError:
+        pass
 
 # Load session state at startup
 load_session_state()
@@ -224,6 +282,31 @@ def convert_web_to_installed_client(web_credentials):
 def is_service_account_key(json_data):
     required_fields = ["type", "project_id", "private_key_id", "private_key", "client_email", "client_id"]
     return all(field in json_data for field in required_fields) and json_data.get("type") == "service_account"
+
+# Function to format DataFrame efficiently for LLM
+def format_dataframe_for_llm(df, max_rows=None):
+    """
+    Format DataFrame in a token-efficient way for LLM analysis.
+    
+    Args:
+        df: pandas DataFrame to format
+        max_rows: maximum number of rows to include (None for all rows)
+        
+    Returns:
+        Formatted string representation of the DataFrame
+    """
+    # Limit rows if specified
+    if max_rows is not None and len(df) > max_rows:
+        df = df.head(max_rows)
+        truncated_note = f"\n[Note: Data truncated to {max_rows} rows out of {len(df)} total rows]"
+    else:
+        truncated_note = ""
+    
+    # Use CSV format which is more compact than string representation
+    csv_string = df.to_csv(index=False)
+    
+    # Add note about truncation if applicable
+    return csv_string + truncated_note
 
 # Navigation functions
 def navigate_to(page):
@@ -350,10 +433,36 @@ def render_new_analysis():
         ["Last 7 days", "Last 30 days", "Last 90 days", "Last 12 months"]
     )
     
+    # OpenAI model selection
+    st.header("LLM Model Settings")
+    model_name = st.selectbox(
+        "Select OpenAI Model",
+        list(OPENAI_MODELS.keys()),
+        format_func=lambda x: f"{OPENAI_MODELS[x]['name']} - {OPENAI_MODELS[x]['description']}",
+        index=list(OPENAI_MODELS.keys()).index(st.session_state.openai_model)
+    )
+    
+    # Display model information
+    st.info(f"Model context limit: {OPENAI_MODELS[model_name]['max_tokens']} tokens")
+    
+    # Max response tokens slider
+    max_response_tokens = st.slider(
+        "Maximum Response Length (tokens)",
+        min_value=500,
+        max_value=OPENAI_MODELS[model_name]["max_tokens"] // 2,  # Half of context limit as max
+        value=OPENAI_MODELS[model_name]["default_response_tokens"],
+        step=500
+    )
+    
     # Run analysis button
     if st.button("Run Analysis"):
         with st.spinner("Running analysis... This may take a few moments."):
             try:
+                # Update session state with selected model
+                st.session_state.openai_model = model_name
+                st.session_state.max_response_tokens = max_response_tokens
+                save_session_state()
+                
                 # Set date range
                 end_date = datetime.datetime.now().date()
                 if date_range == "Last 7 days":
@@ -431,8 +540,14 @@ def render_new_analysis():
                 # Initialize OpenAI client with new API
                 client = OpenAI(api_key=api_key)
                 
-                # Prepare data for OpenAI
-                df_str = df.to_string()
+                # Format DataFrame efficiently for LLM
+                df_formatted = format_dataframe_for_llm(df)
+                
+                # Calculate approximate token count for data
+                approx_token_count = len(df_formatted) // 4  # Rough estimate: 4 characters per token
+                
+                # Display token usage information
+                st.info(f"Approximate token count for data: {approx_token_count} tokens")
                 
                 # Create prompt for OpenAI
                 openai_prompt = f"""
@@ -441,19 +556,20 @@ def render_new_analysis():
                 Analysis Type: {analysis_type}
                 Date Range: {date_range} ({start_date} to {end_date})
                 
-                Data:
-                {df_str}
+                Data (CSV format):
+                {df_formatted}
                 
                 Please provide a detailed analysis with insights and recommendations.
                 """
                 
                 # Call OpenAI API with new interface
                 response = client.chat.completions.create(
-                    model="gpt-4",
+                    model=model_name,
                     messages=[
                         {"role": "system", "content": "You are a Google Analytics expert who provides insightful analysis."},
                         {"role": "user", "content": openai_prompt}
-                    ]
+                    ],
+                    max_tokens=max_response_tokens
                 )
                 
                 # Extract insights with new API response format
@@ -470,7 +586,8 @@ def render_new_analysis():
                     'prompt': prompt,
                     'data': data,
                     'insights': insights,
-                    'date': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    'date': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'model_used': model_name
                 }
                 
                 st.session_state.reports.append(report)
@@ -529,6 +646,8 @@ def render_report_history():
             st.write(f"**Description:** {report['description']}")
             st.write(f"**Account:** {report['account']}")
             st.write(f"**Date Range:** {report['date_range']}")
+            if 'model_used' in report:
+                st.write(f"**Model Used:** {OPENAI_MODELS.get(report['model_used'], {}).get('name', report['model_used'])}")
             st.write("**Insights:**")
             st.write(report['insights'])
             
@@ -588,6 +707,34 @@ def render_settings():
         st.session_state.api_keys['openai']['api_key'] = openai_api_key
         save_session_state()
         st.success("API keys saved successfully")
+    
+    # OpenAI Model Settings
+    st.header("OpenAI Model Settings")
+    
+    model_name = st.selectbox(
+        "Default OpenAI Model",
+        list(OPENAI_MODELS.keys()),
+        format_func=lambda x: f"{OPENAI_MODELS[x]['name']} - {OPENAI_MODELS[x]['description']}",
+        index=list(OPENAI_MODELS.keys()).index(st.session_state.openai_model)
+    )
+    
+    # Display model information
+    st.info(f"Model context limit: {OPENAI_MODELS[model_name]['max_tokens']} tokens")
+    
+    # Max response tokens slider
+    max_response_tokens = st.slider(
+        "Default Maximum Response Length (tokens)",
+        min_value=500,
+        max_value=OPENAI_MODELS[model_name]["max_tokens"] // 2,  # Half of context limit as max
+        value=OPENAI_MODELS[model_name]["default_response_tokens"],
+        step=500
+    )
+    
+    if st.button("Save Model Settings"):
+        st.session_state.openai_model = model_name
+        st.session_state.max_response_tokens = max_response_tokens
+        save_session_state()
+        st.success("Model settings saved successfully")
     
     # Google Analytics Accounts
     st.header("Google Analytics")
@@ -667,6 +814,28 @@ def render_settings():
                 st.error(f"Error adding account: {str(e)}")
         else:
             st.error("Please enter account name, property ID, and upload credentials file")
+    
+    # Token Usage Optimization
+    st.header("Token Usage Optimization")
+    with st.expander("Token Usage Information"):
+        st.markdown("""
+        ### Understanding Token Usage
+        
+        OpenAI models have token limits for both input and output. A token is roughly 4 characters or 0.75 words.
+        
+        The application now uses more efficient data formatting to reduce token usage:
+        - Data is formatted in CSV format instead of the more verbose string representation
+        - The application shows approximate token count before sending data to OpenAI
+        - You can select different models with different token limits
+        - You can control the maximum length of the response
+        
+        ### Tips for Reducing Token Usage
+        
+        1. **Use shorter date ranges** for analysis when possible
+        2. **Select fewer dimensions and metrics** to reduce data size
+        3. **Use more specific prompts** to get more focused analyses
+        4. **Select models with larger context windows** (like o3 or GPT-4o) for larger datasets
+        """)
     
     # Help section for GA4 metrics and dimensions
     st.header("Help with Google Analytics 4 Metrics and Dimensions")
