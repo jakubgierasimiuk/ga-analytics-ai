@@ -6,10 +6,10 @@ and retrieve analytics data for further processing and analysis.
 
 Features:
 - OAuth2 authentication with Google
+- Service account authentication
 - Data retrieval from GA4 properties
 - Support for various metrics and dimensions
 - Data preprocessing and formatting
-- Alternative data import from CSV/JSON files
 """
 
 import os
@@ -117,25 +117,6 @@ class GoogleAnalyticsConnector:
                 
         return creds
     
-    def get_available_properties(self) -> List[Dict[str, str]]:
-        """
-        Get a list of available GA4 properties for the authenticated user.
-        
-        Note: This requires the Analytics Admin API, which is separate from the Data API.
-        This is a simplified implementation and may need to be expanded.
-        
-        Returns:
-            List of dictionaries containing property information
-        """
-        # This is a placeholder - in a real implementation, you would use the Analytics Admin API
-        # to retrieve the list of properties the user has access to
-        
-        # For now, we'll return a message indicating this needs to be implemented
-        print("Note: Retrieving available properties requires the Analytics Admin API.")
-        print("This functionality needs to be implemented separately.")
-        
-        return []
-    
     def run_report(self, 
                   property_id: str,
                   date_range: Union[Dict[str, str], List[Dict[str, str]]],
@@ -206,84 +187,6 @@ class GoogleAnalyticsConnector:
         # Convert the response to a DataFrame
         return self._response_to_dataframe(response)
     
-    def batch_run_reports(self,
-                         property_id: str,
-                         requests: List[Dict[str, Any]]) -> List[pd.DataFrame]:
-        """
-        Run multiple reports in a single batch request.
-        
-        Args:
-            property_id: GA4 property ID (format: "properties/XXXXXX")
-            requests: List of report request configurations
-            
-        Returns:
-            List of pandas.DataFrame objects containing the report data
-        """
-        if not self.client:
-            raise ValueError("Client not initialized. Call authenticate() first.")
-        
-        # Ensure property_id has the correct format
-        if not property_id.startswith('properties/'):
-            property_id = f'properties/{property_id}'
-        
-        # Prepare individual report requests
-        report_requests = []
-        for req in requests:
-            # Prepare date ranges
-            date_ranges = []
-            date_range = req.get('date_range', {'start_date': '7daysAgo', 'end_date': 'today'})
-            
-            if isinstance(date_range, dict):
-                date_ranges.append(DateRange(
-                    start_date=date_range['start_date'],
-                    end_date=date_range['end_date']
-                ))
-            else:
-                for dr in date_range:
-                    date_ranges.append(DateRange(
-                        start_date=dr['start_date'],
-                        end_date=dr['end_date']
-                    ))
-            
-            # Prepare dimensions
-            dimension_list = []
-            dimensions = req.get('dimensions', [])
-            for dim in dimensions:
-                dimension_list.append(Dimension(name=dim))
-            
-            # Prepare metrics
-            metric_list = []
-            metrics = req.get('metrics', [])
-            for metric in metrics:
-                metric_list.append(Metric(name=metric))
-            
-            # Create the request
-            report_request = RunReportRequest(
-                dimensions=dimension_list,
-                metrics=metric_list,
-                date_ranges=date_ranges,
-                limit=req.get('limit'),
-                offset=req.get('offset')
-            )
-            
-            report_requests.append(report_request)
-        
-        # Create the batch request
-        batch_request = BatchRunReportsRequest(
-            property=property_id,
-            requests=report_requests
-        )
-        
-        # Make the API call
-        response = self.client.batch_run_reports(batch_request)
-        
-        # Convert the responses to DataFrames
-        dataframes = []
-        for report in response.reports:
-            dataframes.append(self._response_to_dataframe(report))
-            
-        return dataframes
-    
     def _response_to_dataframe(self, response: Union[RunReportResponse, Any]) -> pd.DataFrame:
         """
         Convert a GA4 API response to a pandas DataFrame.
@@ -321,325 +224,156 @@ class GoogleAnalyticsConnector:
                 df[metric] = pd.to_numeric(df[metric], errors='ignore')
         
         return df
+
+
+class GoogleAnalyticsData:
+    """
+    Class for retrieving and processing Google Analytics 4 data.
+    This class provides a simplified interface for the Streamlit application.
+    """
     
-    def import_from_file(self, file_path: str) -> pd.DataFrame:
+    def __init__(self, property_id: str, service_account_key: Optional[Dict] = None):
         """
-        Import GA data from a file (CSV or JSON).
+        Initialize the Google Analytics Data client.
         
         Args:
-            file_path: Path to the file to import
+            property_id: GA4 property ID (format: "123456789" or "properties/123456789")
+            service_account_key: Optional service account key as a dictionary
+        """
+        self.property_id = property_id
+        self.service_account_key = service_account_key
+        self.connector = None
+        self._initialize_connector()
+    
+    def _initialize_connector(self):
+        """
+        Initialize the GA connector with service account authentication.
+        """
+        try:
+            # If service account key is provided as a dictionary
+            if self.service_account_key:
+                # Create a temporary file to store the service account key
+                temp_key_path = os.path.join(os.path.expanduser('~'), '.temp_sa_key.json')
+                with open(temp_key_path, 'w') as f:
+                    json.dump(self.service_account_key, f)
+                
+                # Initialize connector with service account
+                self.connector = GoogleAnalyticsConnector(
+                    credentials_path=temp_key_path,
+                    use_service_account=True
+                )
+                
+                # Authenticate
+                success = self.connector.authenticate()
+                
+                # Remove temporary file
+                if os.path.exists(temp_key_path):
+                    os.remove(temp_key_path)
+                
+                if not success:
+                    raise ValueError("Failed to authenticate with service account")
+            else:
+                # For testing or development without service account
+                self.connector = None
+                print("Warning: No service account key provided. Some functionality may be limited.")
+        
+        except Exception as e:
+            print(f"Error initializing GA connector: {str(e)}")
+            self.connector = None
+    
+    def get_report(self, 
+                  start_date: str, 
+                  end_date: str, 
+                  dimensions: List[str], 
+                  metrics: List[str]) -> pd.DataFrame:
+        """
+        Get a report from Google Analytics.
+        
+        Args:
+            start_date: Start date in format 'YYYY-MM-DD' or GA4 relative format (e.g., '7daysAgo')
+            end_date: End date in format 'YYYY-MM-DD' or GA4 relative format (e.g., 'yesterday')
+            dimensions: List of dimensions to include in the report
+            metrics: List of metrics to include in the report
             
         Returns:
-            pandas.DataFrame containing the imported data
+            pandas.DataFrame containing the report data
         """
-        file_ext = os.path.splitext(file_path)[1].lower()
+        if not self.connector:
+            # Return empty DataFrame if connector is not initialized
+            print("GA connector not initialized. Returning empty DataFrame.")
+            return pd.DataFrame()
         
-        if file_ext == '.csv':
-            return pd.read_csv(file_path)
-        elif file_ext == '.json':
-            return pd.read_json(file_path)
-        else:
-            raise ValueError(f"Unsupported file format: {file_ext}. Use .csv or .json")
-
-
-class GADataProcessor:
-    """
-    Class for processing and analyzing Google Analytics data.
-    """
-    
-    def __init__(self, data: Optional[pd.DataFrame] = None):
-        """
-        Initialize the data processor.
-        
-        Args:
-            data: Optional initial DataFrame with GA data
-        """
-        self.data = data
-    
-    def set_data(self, data: pd.DataFrame):
-        """
-        Set the data to be processed.
-        
-        Args:
-            data: DataFrame with GA data
-        """
-        self.data = data
-    
-    def get_summary_statistics(self) -> Dict[str, Any]:
-        """
-        Get summary statistics for the data.
-        
-        Returns:
-            Dictionary with summary statistics
-        """
-        if self.data is None:
-            raise ValueError("No data available. Set data first.")
-        
-        # Identify numeric columns
-        numeric_cols = self.data.select_dtypes(include=['number']).columns.tolist()
-        
-        # Calculate summary statistics
-        summary = {
-            'row_count': len(self.data),
-            'metrics': {}
-        }
-        
-        for col in numeric_cols:
-            summary['metrics'][col] = {
-                'sum': self.data[col].sum(),
-                'mean': self.data[col].mean(),
-                'median': self.data[col].median(),
-                'min': self.data[col].min(),
-                'max': self.data[col].max()
+        try:
+            # Create date range
+            date_range = {
+                'start_date': start_date,
+                'end_date': end_date
             }
-        
-        return summary
-    
-    def detect_anomalies(self, column: str, threshold: float = 2.0) -> pd.DataFrame:
-        """
-        Detect anomalies in a specific column using Z-score.
-        
-        Args:
-            column: Column name to check for anomalies
-            threshold: Z-score threshold for anomaly detection
             
-        Returns:
-            DataFrame with rows containing anomalies
-        """
-        if self.data is None:
-            raise ValueError("No data available. Set data first.")
-        
-        if column not in self.data.columns:
-            raise ValueError(f"Column '{column}' not found in data")
-        
-        # Calculate Z-scores
-        mean = self.data[column].mean()
-        std = self.data[column].std()
-        
-        if std == 0:
-            return pd.DataFrame()  # No variation, no anomalies
-        
-        self.data['z_score'] = (self.data[column] - mean) / std
-        
-        # Filter anomalies
-        anomalies = self.data[abs(self.data['z_score']) > threshold].copy()
-        
-        # Remove temporary column
-        self.data.drop('z_score', axis=1, inplace=True)
-        
-        return anomalies
-    
-    def aggregate_by_dimension(self, 
-                              dimension: str, 
-                              metrics: List[str],
-                              agg_func: str = 'sum') -> pd.DataFrame:
-        """
-        Aggregate data by a specific dimension.
-        
-        Args:
-            dimension: Dimension to aggregate by
-            metrics: List of metrics to aggregate
-            agg_func: Aggregation function ('sum', 'mean', 'median', 'min', 'max')
+            # Run the report
+            df = self.connector.run_report(
+                property_id=self.property_id,
+                date_range=date_range,
+                dimensions=dimensions,
+                metrics=metrics
+            )
             
-        Returns:
-            Aggregated DataFrame
-        """
-        if self.data is None:
-            raise ValueError("No data available. Set data first.")
-        
-        if dimension not in self.data.columns:
-            raise ValueError(f"Dimension '{dimension}' not found in data")
-        
-        for metric in metrics:
-            if metric not in self.data.columns:
-                raise ValueError(f"Metric '{metric}' not found in data")
-        
-        # Perform aggregation
-        return self.data.groupby(dimension)[metrics].agg(agg_func).reset_index()
-    
-    def calculate_growth(self, 
-                        metric: str, 
-                        date_column: str = 'date',
-                        periods: Optional[List[str]] = None) -> pd.DataFrame:
-        """
-        Calculate growth rates for a metric over time.
-        
-        Args:
-            metric: Metric to calculate growth for
-            date_column: Column containing dates
-            periods: Optional list of period names to include
+            return df
             
-        Returns:
-            DataFrame with growth rates
-        """
-        if self.data is None:
-            raise ValueError("No data available. Set data first.")
-        
-        if metric not in self.data.columns:
-            raise ValueError(f"Metric '{metric}' not found in data")
-        
-        if date_column not in self.data.columns:
-            raise ValueError(f"Date column '{date_column}' not found in data")
-        
-        # Ensure date column is datetime
-        self.data[date_column] = pd.to_datetime(self.data[date_column])
-        
-        # Sort by date
-        sorted_data = self.data.sort_values(date_column)
-        
-        # Calculate growth
-        sorted_data[f'{metric}_growth'] = sorted_data[metric].pct_change() * 100
-        
-        # Filter periods if specified
-        if periods:
-            return sorted_data[sorted_data[date_column].isin(periods)]
-        
-        return sorted_data
+        except Exception as e:
+            print(f"Error getting report: {str(e)}")
+            # Return empty DataFrame on error
+            return pd.DataFrame()
     
-    def prepare_data_for_llm(self) -> Dict[str, Any]:
+    def get_available_metrics_and_dimensions(self) -> Dict[str, List[str]]:
         """
-        Prepare data in a format suitable for sending to an LLM.
+        Get lists of available metrics and dimensions for GA4.
+        
+        Note: This is a simplified implementation that returns common metrics and dimensions.
+        In a production environment, you would use the Analytics Admin API to get the actual
+        available metrics and dimensions for the specific property.
         
         Returns:
-            Dictionary with processed data and metadata
+            Dictionary with 'metrics' and 'dimensions' keys
         """
-        if self.data is None:
-            raise ValueError("No data available. Set data first.")
+        # Common GA4 metrics
+        metrics = [
+            'activeUsers',
+            'newUsers',
+            'sessions',
+            'averageSessionDuration',
+            'screenPageViews',
+            'engagementRate',
+            'eventCount',
+            'conversions',
+            'totalRevenue',
+            'itemsViewed',
+            'itemsAddedToCart',
+            'itemsCheckedOut',
+            'itemsPurchased',
+            'itemRevenue'
+        ]
         
-        # Get basic info about the data
-        dimensions = self.data.select_dtypes(exclude=['number']).columns.tolist()
-        metrics = self.data.select_dtypes(include=['number']).columns.tolist()
+        # Common GA4 dimensions
+        dimensions = [
+            'date',
+            'deviceCategory',
+            'country',
+            'region',
+            'city',
+            'sessionSource',
+            'sessionMedium',
+            'sessionCampaignName',
+            'pageTitle',
+            'pagePathPlusQueryString',
+            'itemName',
+            'itemId',
+            'itemCategory',
+            'itemBrand',
+            'transactionId'
+        ]
         
-        # Get summary statistics
-        summary = self.get_summary_statistics()
-        
-        # Prepare sample data (limit rows to avoid token limits)
-        sample_rows = min(20, len(self.data))
-        sample_data = self.data.head(sample_rows).to_dict(orient='records')
-        
-        # Prepare result
-        result = {
-            'metadata': {
-                'dimensions': dimensions,
-                'metrics': metrics,
-                'row_count': len(self.data),
-                'sample_size': sample_rows
-            },
-            'summary': summary,
-            'sample_data': sample_data
+        return {
+            'metrics': metrics,
+            'dimensions': dimensions
         }
-        
-        return result
-
-
-# Example usage functions
-
-def example_oauth_authentication():
-    """Example of authenticating with OAuth."""
-    # Path to your OAuth client ID JSON file
-    credentials_path = 'path/to/your/client_secret.json'
-    
-    # Create connector
-    connector = GoogleAnalyticsConnector(credentials_path=credentials_path)
-    
-    # Authenticate
-    if connector.authenticate():
-        print("Authentication successful!")
-    else:
-        print("Authentication failed.")
-    
-    return connector
-
-def example_service_account_authentication():
-    """Example of authenticating with a service account."""
-    # Path to your service account JSON file
-    credentials_path = 'path/to/your/service-account.json'
-    
-    # Create connector
-    connector = GoogleAnalyticsConnector(
-        credentials_path=credentials_path,
-        use_service_account=True
-    )
-    
-    # Authenticate
-    if connector.authenticate():
-        print("Authentication successful!")
-    else:
-        print("Authentication failed.")
-    
-    return connector
-
-def example_run_report(connector, property_id):
-    """Example of running a basic report."""
-    # Define date range
-    date_range = {
-        'start_date': '30daysAgo',
-        'end_date': 'today'
-    }
-    
-    # Define metrics and dimensions
-    metrics = ['activeUsers', 'sessions', 'screenPageViews']
-    dimensions = ['date', 'deviceCategory']
-    
-    # Run the report
-    df = connector.run_report(
-        property_id=property_id,
-        date_range=date_range,
-        metrics=metrics,
-        dimensions=dimensions
-    )
-    
-    print(f"Retrieved {len(df)} rows of data.")
-    print(df.head())
-    
-    return df
-
-def example_data_processing(df):
-    """Example of processing GA data."""
-    # Create processor
-    processor = GADataProcessor(df)
-    
-    # Get summary statistics
-    summary = processor.get_summary_statistics()
-    print("Summary statistics:")
-    print(json.dumps(summary, indent=2))
-    
-    # Aggregate by device category
-    agg_data = processor.aggregate_by_dimension(
-        dimension='deviceCategory',
-        metrics=['activeUsers', 'sessions', 'screenPageViews']
-    )
-    print("\nAggregated by device category:")
-    print(agg_data)
-    
-    # Detect anomalies in sessions
-    anomalies = processor.detect_anomalies(column='sessions')
-    print("\nAnomaly detection for sessions:")
-    print(anomalies)
-    
-    # Prepare data for LLM
-    llm_data = processor.prepare_data_for_llm()
-    print("\nData prepared for LLM:")
-    print(json.dumps(llm_data, indent=2)[:500] + "...")  # Truncated for brevity
-    
-    return llm_data
-
-def main():
-    """Main function to demonstrate the GA integration."""
-    # This is just an example - in a real application, you would integrate this
-    # with your Flask/FastAPI backend and database
-    
-    print("Google Analytics Integration Example")
-    print("-----------------------------------")
-    
-    # Uncomment and modify these lines to run the examples
-    # connector = example_oauth_authentication()
-    # property_id = "YOUR_GA4_PROPERTY_ID"  # e.g., "123456789"
-    # df = example_run_report(connector, property_id)
-    # llm_data = example_data_processing(df)
-    
-    print("\nNote: This is a demonstration module. In a real application,")
-    print("you would need to provide valid credentials and property ID.")
-
-if __name__ == "__main__":
-    main()
