@@ -59,8 +59,7 @@ if 'service_account_key' not in st.session_state:
     st.session_state.service_account_key = None
 if 'selected_model' not in st.session_state:
     st.session_state.selected_model = "o3"  # Default to o3 model
-if 'max_tokens' not in st.session_state:
-    st.session_state.max_tokens = 1000
+# No need to initialize max_tokens as we'll calculate it dynamically
 if 'language' not in st.session_state:
     st.session_state.language = "en"  # Default language
 
@@ -73,9 +72,130 @@ OPENAI_MODELS = {
     "gpt-3.5-turbo": {"name": "gpt-3.5-turbo", "description": "Szybki i ekonomiczny model", "max_context": 16385}
 }
 
+# Text translations
+TRANSLATIONS = {
+    "en": {
+        "navigation": "Navigation",
+        "dashboard": "Dashboard",
+        "new_analysis": "New Analysis",
+        "report_history": "Report History",
+        "prompt_library": "Prompt Library",
+        "settings": "Settings",
+        "select_analysis_type": "Select Analysis Type",
+        "analysis_prompt": "Analysis Prompt",
+        "select_prompt": "Select Prompt",
+        "default_prompt": "Default Prompt",
+        "use_custom_prompt": "Use custom prompt",
+        "custom_prompt": "Custom Prompt",
+        "report_details": "Report Details",
+        "report_title": "Report Title",
+        "report_description": "Report Description",
+        "ga_account": "Google Analytics Account",
+        "select_account": "Select Account",
+        "date_range": "Date Range",
+        "select_date_range": "Select Date Range",
+        "run_analysis": "Run Analysis",
+        "selected_metrics": "Selected metrics based on prompt",
+        "selected_dimensions": "Selected dimensions based on prompt",
+        "analysis_results": "Analysis Results",
+        "add_account": "Add Google Analytics Account",
+        "property_id": "Property ID",
+        "service_account_key": "Service Account Key (JSON)",
+        "add": "Add",
+        "openai_api_key": "OpenAI API Key",
+        "save": "Save",
+        "select_model": "Select OpenAI Model",
+        "language": "Language",
+        "english": "English",
+        "polish": "Polski",
+        "help_metrics": "Common GA4 Metrics and Dimensions",
+        "no_reports": "No reports available. Run an analysis to see results here.",
+        "loading": "Loading...",
+        "error": "Error",
+        "success": "Success",
+        "product_comparison": "Product Comparison",
+        "top_products": "Top Products by Composite Score",
+        "custom_prompt_template": "Your Custom Prompt",
+        "save_to_library": "Save to Library",
+        "prompt_saved": "Prompt saved to library! (Note: This is a demo feature, prompts are not actually saved between sessions)",
+        "last_7_days": "Last 7 days",
+        "last_30_days": "Last 30 days",
+        "last_90_days": "Last 90 days",
+        "last_12_months": "Last 12 months",
+        "custom_range": "Custom Range",
+        "start_date": "Start Date",
+        "end_date": "End Date",
+        "use_suggested_prompt": "Use suggested prompt"
+    },
+    "pl": {
+        "navigation": "Nawigacja",
+        "dashboard": "Pulpit",
+        "new_analysis": "Nowa Analiza",
+        "report_history": "Historia Raportów",
+        "prompt_library": "Biblioteka Promptów",
+        "settings": "Ustawienia",
+        "select_analysis_type": "Wybierz Typ Analizy",
+        "analysis_prompt": "Prompt Analizy",
+        "select_prompt": "Wybierz Prompt",
+        "default_prompt": "Domyślny Prompt",
+        "use_custom_prompt": "Użyj własnego promptu",
+        "custom_prompt": "Własny Prompt",
+        "report_details": "Szczegóły Raportu",
+        "report_title": "Tytuł Raportu",
+        "report_description": "Opis Raportu",
+        "ga_account": "Konto Google Analytics",
+        "select_account": "Wybierz Konto",
+        "date_range": "Zakres Dat",
+        "select_date_range": "Wybierz Zakres Dat",
+        "run_analysis": "Uruchom Analizę",
+        "selected_metrics": "Wybrane metryki na podstawie promptu",
+        "selected_dimensions": "Wybrane wymiary na podstawie promptu",
+        "analysis_results": "Wyniki Analizy",
+        "add_account": "Dodaj Konto Google Analytics",
+        "property_id": "ID Właściwości",
+        "service_account_key": "Klucz Konta Usługi (JSON)",
+        "add": "Dodaj",
+        "openai_api_key": "Klucz API OpenAI",
+        "save": "Zapisz",
+        "select_model": "Wybierz Model OpenAI",
+        "language": "Język",
+        "english": "English",
+        "polish": "Polski",
+        "help_metrics": "Popularne Metryki i Wymiary GA4",
+        "no_reports": "Brak dostępnych raportów. Uruchom analizę, aby zobaczyć wyniki tutaj.",
+        "loading": "Ładowanie...",
+        "error": "Błąd",
+        "success": "Sukces",
+        "product_comparison": "Porównanie Produktów",
+        "top_products": "Najlepsze Produkty wg Złożonego Wyniku",
+        "custom_prompt_template": "Twój Własny Prompt",
+        "save_to_library": "Zapisz do Biblioteki",
+        "prompt_saved": "Prompt zapisany do biblioteki! (Uwaga: To funkcja demonstracyjna, prompty nie są faktycznie zapisywane między sesjami)",
+        "last_7_days": "Ostatnie 7 dni",
+        "last_30_days": "Ostatnie 30 dni",
+        "last_90_days": "Ostatnie 90 dni",
+        "last_12_months": "Ostatnie 12 miesięcy",
+        "custom_range": "Niestandardowy Zakres",
+        "start_date": "Data Początkowa",
+        "end_date": "Data Końcowa",
+        "use_suggested_prompt": "Użyj sugerowanego promptu"
+    }
+}
+
+# Function to get translated text
+def get_text(key):
+    lang = st.session_state.language
+    return TRANSLATIONS.get(lang, TRANSLATIONS["en"]).get(key, TRANSLATIONS["en"].get(key, key))
+
 # Navigation sidebar
-st.sidebar.title("Navigation")
-page = st.sidebar.radio("", ["Dashboard", "New Analysis", "Report History", "Prompt Library", "Settings"])
+st.sidebar.title(get_text("navigation"))
+page = st.sidebar.radio("", [
+    get_text("dashboard"), 
+    get_text("new_analysis"), 
+    get_text("report_history"), 
+    get_text("prompt_library"), 
+    get_text("settings")
+])
 
 # Function to add a GA account
 def add_ga_account(property_id, service_account_key=None):
@@ -230,7 +350,11 @@ def run_analysis(account_name, start_date, end_date, analysis_type, custom_promp
         # Get analysis from LLM
         api_key = st.session_state.openai_api_key
         model = st.session_state.selected_model
-        max_tokens = st.session_state.max_tokens
+        # Auto-determine appropriate max tokens based on model and input size
+        input_token_estimate = len(full_prompt) // 4  # Rough estimate
+        model_max_tokens = OPENAI_MODELS[model]["max_context"]
+        # Use 25% of remaining tokens after input (or 1000 if that's larger)
+        max_tokens = max(1000, int((model_max_tokens - input_token_estimate) * 0.25))
         
         analysis_result = analyze_data_with_llm(full_prompt, api_key, model, max_tokens)
         
@@ -393,19 +517,19 @@ def compare_products(df, metrics, top_n=10):
     return product_df.head(top_n)
 
 # Dashboard page
-if page == "Dashboard":
-    st.title("GA Analytics AI Dashboard")
+if page == get_text("dashboard"):
+    st.title("GA Analytics AI " + get_text("dashboard"))
     
     if not st.session_state.ga_accounts:
-        st.info("No Google Analytics accounts added yet. Go to Settings to add an account.")
+        st.info(get_text("no_reports").split('.')[0] + ". " + get_text("settings") + ".")
     else:
-        st.subheader("Quick Analysis")
+        st.subheader(get_text("quick_analysis"))
         
         col1, col2 = st.columns(2)
         
         with col1:
-            account_name = st.selectbox("Select Account", list(st.session_state.ga_accounts.keys()))
-            analysis_type = st.selectbox("Select Analysis Type", [
+            account_name = st.selectbox(get_text("select_account"), list(st.session_state.ga_accounts.keys()))
+            analysis_type = st.selectbox(get_text("select_analysis_type"), [
                 "general_overview", "traffic_sources", "content_performance", 
                 "conversion_analysis", "user_behavior", "product_performance",
                 "cart_analysis", "checkout_analysis", "product_list_performance",
@@ -413,50 +537,50 @@ if page == "Dashboard":
             ])
         
         with col2:
-            date_range = st.selectbox("Select Date Range", [
-                "Last 7 days", "Last 30 days", "Last 90 days", "Last 12 months"
+            date_range = st.selectbox(get_text("select_date_range"), [
+                get_text("last_7_days"), get_text("last_30_days"), get_text("last_90_days"), get_text("last_12_months")
             ])
             
             # Convert date range to start and end dates
             end_date = "yesterday"
-            if date_range == "Last 7 days":
+            if date_range == get_text("last_7_days"):
                 start_date = "7daysAgo"
-            elif date_range == "Last 30 days":
+            elif date_range == get_text("last_30_days"):
                 start_date = "30daysAgo"
-            elif date_range == "Last 90 days":
+            elif date_range == get_text("last_90_days"):
                 start_date = "90daysAgo"
             else:
                 start_date = "365daysAgo"
         
-        if st.button("Run Quick Analysis"):
-            with st.spinner("Running analysis..."):
+        if st.button(get_text("run_analysis")):
+            with st.spinner(get_text("loading")):
                 result, error = run_analysis(account_name, start_date, end_date, analysis_type)
                 
                 if error:
                     st.error(error)
                 else:
-                    st.subheader("Analysis Result")
+                    st.subheader(get_text("analysis_results"))
                     st.markdown(result)
         
         # Recent reports
-        st.subheader("Recent Reports")
+        st.subheader(get_text("report_history"))
         if st.session_state.reports:
             for i, report in enumerate(reversed(st.session_state.reports[-5:])):
                 with st.expander(f"{report['timestamp']} - {report['analysis_type']}"):
                     st.markdown(report['result'])
         else:
-            st.info("No reports yet. Run an analysis to see reports here.")
+            st.info(get_text("no_reports"))
 
 # New Analysis page
-elif page == "New Analysis":
-    st.title("New Analysis")
+elif page == get_text("new_analysis"):
+    st.title(get_text("new_analysis"))
     
     if not st.session_state.ga_accounts:
-        st.info("No Google Analytics accounts added yet. Go to Settings to add an account.")
+        st.info(get_text("no_reports").split('.')[0] + ". " + get_text("settings") + ".")
     else:
         # Analysis type selection
-        st.subheader("Select Analysis Type")
-        analysis_type = st.selectbox("Select Analysis Type", [
+        st.subheader(get_text("select_analysis_type"))
+        analysis_type = st.selectbox(get_text("select_analysis_type"), [
             "general_overview", "traffic_sources", "content_performance", 
             "conversion_analysis", "user_behavior", "product_performance",
             "cart_analysis", "checkout_analysis", "product_list_performance",
@@ -464,14 +588,14 @@ elif page == "New Analysis":
         ])
         
         # Prompt selection
-        st.subheader("Analysis Prompt")
-        prompt_type = st.selectbox("Select Prompt", ["Default Prompt", "Custom Prompt"])
+        st.subheader(get_text("analysis_prompt"))
+        prompt_type = st.selectbox(get_text("select_prompt"), [get_text("default_prompt"), get_text("custom_prompt")])
         
         custom_prompt = None
-        if prompt_type == "Custom Prompt":
-            use_custom = st.checkbox("Use custom prompt")
-            if use_custom:
-                custom_prompt = st.text_area("Custom Prompt", height=150)
+        if prompt_type == get_text("custom_prompt"):
+            use_custom_prompt = st.checkbox(get_text("use_custom_prompt"))
+            if use_custom_prompt:
+                custom_prompt = st.text_area(get_text("custom_prompt"), height=150)
                 
                 # Show product analysis detection if prompt is entered
                 if custom_prompt:
@@ -499,22 +623,26 @@ elif page == "New Analysis":
                                 st.info(product_analysis["suggested_prompt"])
                                 
                                 # Option to use suggested prompt
-                                if st.button("Use suggested prompt"):
+                                if st.button(get_text("use_suggested_prompt")):
                                     custom_prompt = product_analysis["suggested_prompt"]
         
         # Report details
-        st.subheader("Report Details")
-        report_title = st.text_input("Report Title", f"{analysis_type.replace('_', ' ').title()} - {datetime.now().strftime('%Y-%m-%d')}")
-        report_description = st.text_area("Report Description", f"Analysis of {analysis_type.replace('_', ' ')} data from Google Analytics.")
+        st.subheader(get_text("report_details"))
+        report_title = st.text_input(get_text("report_title"), f"{analysis_type.replace('_', ' ').title()} - {datetime.now().strftime('%Y-%m-%d')}")
+        report_description = st.text_area(get_text("report_description"), f"Analysis of {analysis_type.replace('_', ' ')} data from Google Analytics.")
         
         # Account selection
-        st.subheader("Google Analytics Account")
-        account_name = st.selectbox("Select Account", list(st.session_state.ga_accounts.keys()))
+        st.subheader(get_text("ga_account"))
+        account_name = st.selectbox(get_text("select_account"), list(st.session_state.ga_accounts.keys()))
         
         # Date range selection
-        st.subheader("Date Range")
-        date_range = st.selectbox("Select Date Range", [
-            "Last 7 days", "Last 30 days", "Last 90 days", "Last 12 months", "Custom Range"
+        st.subheader(get_text("date_range"))
+        date_range = st.selectbox(get_text("select_date_range"), [
+            get_text("last_7_days"), 
+            get_text("last_30_days"), 
+            get_text("last_90_days"), 
+            get_text("last_12_months"), 
+            get_text("custom_range")
         ])
         
         if date_range == "Custom Range":
@@ -583,7 +711,7 @@ elif page == "New Analysis":
                     start_date, 
                     end_date, 
                     analysis_type,
-                    custom_prompt if use_custom else None,
+                    custom_prompt if use_custom_prompt else None,
                     dimensions,
                     metrics
                 )
@@ -798,18 +926,9 @@ elif page == "Settings":
         format_func=lambda x: f"{x} - {OPENAI_MODELS[x]['description']}"
     )
     
-    # Max tokens slider
-    max_tokens = st.slider(
-        "Maximum Response Length (tokens)", 
-        min_value=100, 
-        max_value=4000, 
-        value=st.session_state.max_tokens,
-        step=100
-    )
-    
+
     if st.button("Save Model Settings"):
         st.session_state.selected_model = selected_model
-        st.session_state.max_tokens = max_tokens
         st.success("Model settings saved!")
     
     # Language settings
