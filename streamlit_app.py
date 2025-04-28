@@ -63,13 +63,13 @@ if 'selected_model' not in st.session_state:
 if 'language' not in st.session_state:
     st.session_state.language = "en"  # Default language
 
-# Define available OpenAI models
+# Define available OpenAI models with max output tokens
 OPENAI_MODELS = {
-    "o3": {"name": "o3", "description": "Najnowszy i najpotężniejszy model rozumowania z wiodącą wydajnością w kodowaniu, matematyce i nauce", "max_context": 128000},
-    "gpt-4o": {"name": "gpt-4o", "description": "Najnowszy model GPT-4 z ulepszoną wydajnością i niższym kosztem", "max_context": 128000},
-    "gpt-4-turbo": {"name": "gpt-4-turbo", "description": "Szybszy model GPT-4 z dużym kontekstem", "max_context": 128000},
-    "gpt-4": {"name": "gpt-4", "description": "Standardowy model GPT-4", "max_context": 8192},
-    "gpt-3.5-turbo": {"name": "gpt-3.5-turbo", "description": "Szybki i ekonomiczny model", "max_context": 16385}
+    "o3": {"name": "o3", "description": "Najnowszy i najpotężniejszy model rozumowania z wiodącą wydajnością w kodowaniu, matematyce i nauce", "max_context": 128000, "max_output": 4096},
+    "gpt-4o": {"name": "gpt-4o", "description": "Najnowszy model GPT-4 z ulepszoną wydajnością i niższym kosztem", "max_context": 128000, "max_output": 4096},
+    "gpt-4-turbo": {"name": "gpt-4-turbo", "description": "Szybszy model GPT-4 z dużym kontekstem", "max_context": 128000, "max_output": 4096},
+    "gpt-4": {"name": "gpt-4", "description": "Standardowy model GPT-4", "max_context": 8192, "max_output": 4096},
+    "gpt-3.5-turbo": {"name": "gpt-3.5-turbo", "description": "Szybki i ekonomiczny model", "max_context": 16385, "max_output": 4096}
 }
 
 # Text translations
@@ -125,7 +125,30 @@ TRANSLATIONS = {
         "custom_range": "Custom Range",
         "start_date": "Start Date",
         "end_date": "End Date",
-        "use_suggested_prompt": "Use suggested prompt"
+        "use_suggested_prompt": "Use suggested prompt",
+        "prompt_library_description": "This page contains a library of prompts that you can use for your analyses. Copy a prompt and use it in the Custom Prompt field on the New Analysis page.",
+        "general_analysis_prompts": "General Analysis Prompts",
+        "website_performance_overview": "Website Performance Overview",
+        "traffic_source_analysis": "Traffic Source Analysis",
+        "ecommerce_analysis_prompts": "E-commerce Analysis Prompts",
+        "product_performance_analysis": "Product Performance Analysis",
+        "shopping_cart_analysis": "Shopping Cart Analysis",
+        "checkout_process_analysis": "Checkout Process Analysis",
+        "model_settings": "Model Settings",
+        "save_model_settings": "Save Model Settings",
+        "model_settings_saved": "Model settings saved!",
+        "language_settings": "Language Settings",
+        "save_language_settings": "Save Language Settings",
+        "language_settings_saved": "Language settings saved!",
+        "ga_settings": "Google Analytics Settings",
+        "current_accounts": "Current Accounts",
+        "no_accounts_added": "No accounts added yet.",
+        "remove": "Remove",
+        "account_removed": "Account removed successfully!",
+        "add_new_account": "Add New Account",
+        "upload_key_file": "Upload Service Account Key File (JSON)",
+        "key_file_uploaded": "Key file uploaded successfully!",
+        "add_account_button": "Add Account"
     },
     "pl": {
         "navigation": "Nawigacja",
@@ -178,7 +201,30 @@ TRANSLATIONS = {
         "custom_range": "Niestandardowy Zakres",
         "start_date": "Data Początkowa",
         "end_date": "Data Końcowa",
-        "use_suggested_prompt": "Użyj sugerowanego promptu"
+        "use_suggested_prompt": "Użyj sugerowanego promptu",
+        "prompt_library_description": "Ta strona zawiera bibliotekę promptów, których możesz użyć do swoich analiz. Skopiuj prompt i użyj go w polu Własny Prompt na stronie Nowa Analiza.",
+        "general_analysis_prompts": "Ogólne Prompty Analityczne",
+        "website_performance_overview": "Przegląd Wydajności Strony",
+        "traffic_source_analysis": "Analiza Źródeł Ruchu",
+        "ecommerce_analysis_prompts": "Prompty Analityczne E-commerce",
+        "product_performance_analysis": "Analiza Wydajności Produktów",
+        "shopping_cart_analysis": "Analiza Koszyka Zakupowego",
+        "checkout_process_analysis": "Analiza Procesu Zakupowego",
+        "model_settings": "Ustawienia Modelu",
+        "save_model_settings": "Zapisz Ustawienia Modelu",
+        "model_settings_saved": "Ustawienia modelu zapisane!",
+        "language_settings": "Ustawienia Języka",
+        "save_language_settings": "Zapisz Ustawienia Języka",
+        "language_settings_saved": "Ustawienia języka zapisane!",
+        "ga_settings": "Ustawienia Google Analytics",
+        "current_accounts": "Obecne Konta",
+        "no_accounts_added": "Nie dodano jeszcze żadnych kont.",
+        "remove": "Usuń",
+        "account_removed": "Konto usunięte pomyślnie!",
+        "add_new_account": "Dodaj Nowe Konto",
+        "upload_key_file": "Prześlij Plik Klucza Konta Usługi (JSON)",
+        "key_file_uploaded": "Plik klucza przesłany pomyślnie!",
+        "add_account_button": "Dodaj Konto"
     }
 }
 
@@ -352,9 +398,9 @@ def run_analysis(account_name, start_date, end_date, analysis_type, custom_promp
         model = st.session_state.selected_model
         # Auto-determine appropriate max tokens based on model and input size
         input_token_estimate = len(full_prompt) // 4  # Rough estimate
-        model_max_tokens = OPENAI_MODELS[model]["max_context"]
-        # Use 25% of remaining tokens after input (or 1000 if that's larger)
-        max_tokens = max(1000, int((model_max_tokens - input_token_estimate) * 0.25))
+        model_max_output = OPENAI_MODELS[model]["max_output"]
+        # Ensure max_tokens doesn't exceed the model's output limit
+        max_tokens = min(model_max_output, 1000)  # Default to 1000 or model limit, whichever is smaller
         
         analysis_result = analyze_data_with_llm(full_prompt, api_key, model, max_tokens)
         
@@ -754,27 +800,27 @@ elif page == get_text("new_analysis"):
                                         st.plotly_chart(fig)
 
 # Report History page
-elif page == "Report History":
-    st.title("Report History")
+elif page == get_text("report_history"):
+    st.title(get_text("report_history"))
     
     if not st.session_state.reports:
-        st.info("No reports yet. Run an analysis to see reports here.")
+        st.info(get_text("no_reports"))
     else:
         for i, report in enumerate(reversed(st.session_state.reports)):
             with st.expander(f"{report['timestamp']} - {report['analysis_type']}"):
-                st.markdown(f"**Account:** {report['account']}")
-                st.markdown(f"**Date Range:** {report['start_date']} to {report['end_date']}")
-                st.markdown(f"**Analysis Type:** {report['analysis_type']}")
+                st.markdown(f"**{get_text('ga_account')}:** {report['account']}")
+                st.markdown(f"**{get_text('date_range')}:** {report['start_date']} to {report['end_date']}")
+                st.markdown(f"**{get_text('select_analysis_type')}:** {report['analysis_type']}")
                 if report.get('custom_prompt'):
-                    st.markdown(f"**Custom Prompt:** {report['custom_prompt']}")
-                st.markdown(f"**Dimensions:** {', '.join(report['dimensions'])}")
-                st.markdown(f"**Metrics:** {', '.join(report['metrics'])}")
+                    st.markdown(f"**{get_text('custom_prompt')}:** {report['custom_prompt']}")
+                st.markdown(f"**{get_text('selected_dimensions')}:** {', '.join(report['dimensions'])}")
+                st.markdown(f"**{get_text('selected_metrics')}:** {', '.join(report['metrics'])}")
                 
                 # Convert data dict back to DataFrame for display
                 df = pd.DataFrame.from_dict(report['data'])
                 st.dataframe(df)
                 
-                st.markdown("### Analysis Result")
+                st.markdown(f"### {get_text('analysis_results')}")
                 st.markdown(report['result'])
                 
                 # If this is a product analysis, offer product comparison
@@ -800,25 +846,22 @@ elif page == "Report History":
                                     st.plotly_chart(fig)
 
 # Prompt Library page
-elif page == "Prompt Library":
-    st.title("Prompt Library")
+elif page == get_text("prompt_library"):
+    st.title(get_text("prompt_library"))
     
-    st.markdown("""
-    This page contains a library of prompts that you can use for your analyses. 
-    Copy a prompt and use it in the Custom Prompt field on the New Analysis page.
-    """)
+    st.markdown(get_text("prompt_library_description"))
     
     # General prompts
-    st.subheader("General Analysis Prompts")
+    st.subheader(get_text("general_analysis_prompts"))
     
-    with st.expander("Website Performance Overview"):
+    with st.expander(get_text("website_performance_overview")):
         st.markdown("""
         Provide a comprehensive overview of the website performance based on the Google Analytics data. 
         Include trends in user engagement, traffic sources, and device usage. 
         Identify any significant patterns or anomalies in the data and provide actionable insights.
         """)
     
-    with st.expander("Traffic Source Analysis"):
+    with st.expander(get_text("traffic_source_analysis")):
         st.markdown("""
         Analyze the traffic sources based on the provided Google Analytics data. 
         Identify the top performing sources, mediums, and campaigns. 
@@ -827,9 +870,9 @@ elif page == "Prompt Library":
         """)
     
     # E-commerce prompts
-    st.subheader("E-commerce Analysis Prompts")
+    st.subheader(get_text("ecommerce_analysis_prompts"))
     
-    with st.expander("Product Performance Analysis"):
+    with st.expander(get_text("product_performance_analysis")):
         st.markdown("""
         Analyze the performance of products based on the provided Google Analytics data.
         Identify the top performing products in terms of views, add-to-carts, and purchases.
@@ -837,7 +880,7 @@ elif page == "Prompt Library":
         Provide insights on product performance trends and recommendations for inventory and marketing decisions.
         """)
     
-    with st.expander("Shopping Cart Analysis"):
+    with st.expander(get_text("shopping_cart_analysis")):
         st.markdown("""
         Analyze shopping cart behavior based on the provided Google Analytics data.
         Identify products frequently added to cart but not purchased.
@@ -845,7 +888,7 @@ elif page == "Prompt Library":
         Provide recommendations for reducing cart abandonment and improving checkout conversion.
         """)
     
-    with st.expander("Checkout Process Analysis"):
+    with st.expander(get_text("checkout_process_analysis")):
         st.markdown("""
         Analyze the checkout process based on the provided Google Analytics data.
         Identify any bottlenecks or drop-off points in the checkout funnel.
